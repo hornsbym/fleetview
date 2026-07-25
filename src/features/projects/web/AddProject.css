@@ -1,0 +1,55 @@
+/* AddProject styling — colors/radius/fonts from tokens.css; px for layout only. */
+.add-project { display: flex; flex-direction: column; gap: 8px; }
+
+.ap-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ap-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.ap-path { flex: 1; min-width: 0; font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-remove {
+  flex: none;
+  background: transparent;
+  border: 0;
+  color: var(--faint);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.ap-remove:hover:not(:disabled) { color: var(--ink); }
+.ap-remove:disabled { opacity: .5; cursor: default; }
+
+.ap-form { display: flex; gap: 6px; }
+.ap-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink);
+  padding: 6px 8px;
+  font-size: 12px;
+}
+.ap-input::placeholder { color: var(--faint); }
+.ap-input:focus { outline: none; border-color: var(--lead); }
+.ap-add {
+  flex: none;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.ap-add:hover:not(:disabled) { background: var(--panel2); border-color: var(--lead); }
+.ap-add:disabled { opacity: .5; cursor: default; }
+
+.ap-error { color: var(--active); font-size: 11px; }

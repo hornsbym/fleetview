@@ -1,0 +1,32 @@
+/* ProjectSwitcher styling — colors/radius/fonts from tokens.css; px for layout only. */
+.project-switcher { display: flex; flex-direction: column; gap: 8px; }
+.ps-empty { color: var(--faint); font-size: 12px; padding: 10px 6px; }
+
+.ps-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.ps-card:hover { background: var(--panel2); }
+.ps-card.sel { border-color: var(--lead); box-shadow: 0 0 0 1px var(--lead) inset; }
+
+.ps-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.ps-name-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-name .live, .ps-name .idle { margin-left: auto; flex: none; }
+
+.ps-path {
+  color: var(--faint);
+  font-size: 11px;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ps-meta { color: var(--dim); font-size: 11px; margin-top: 6px; }

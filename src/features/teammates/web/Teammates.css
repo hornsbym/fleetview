@@ -1,0 +1,217 @@
+/* Teammates feature — live per-agent activity surface.
+   Colors/radius/fonts from tokens only; classes are tm-prefixed to stay clear
+   of the global App.css. Reuses shared .live / .idle / .mono from tokens.css. */
+
+.tm-empty {
+  color: var(--faint);
+  font-size: 12px;
+  font-style: italic;
+  padding: 8px 2px;
+}
+
+.tm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* Row + state accent (left border): lead / active / idle. */
+.tm-row {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.tm-row.is-lead { border-left-color: var(--lead); }
+.tm-row.is-active { border-left-color: var(--done); }
+.tm-row.is-idle { border-left-color: var(--faint); opacity: .82; }
+
+.tm-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tm-role {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--dim);
+}
+.tm-role.lead { color: var(--lead); border-color: var(--lead); }
+
+.tm-name { font-weight: 600; color: var(--ink); }
+
+/* Phase pill (M6 plan-gated agents) — hue = lifecycle stage.
+   Base/planning/unknown reads faint; each known phase overrides below. */
+.tm-phase {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--faint);
+  color: var(--faint);
+  white-space: nowrap;
+}
+.tm-phase.planning { color: var(--faint); border-color: var(--faint); }
+.tm-phase.working { color: var(--lead); border-color: var(--lead); }
+.tm-phase.done { color: var(--done); border-color: var(--done); }
+/* blocked reuses the app-wide attention amber (cf. TaskBoard .tb-badge.blocked);
+   no red token exists in tokens.css — lead can add one for a distinct danger hue. */
+.tm-phase.blocked { color: var(--active); border-color: var(--active); }
+/* awaiting-approval = filled amber: the one state that needs a human decision. */
+.tm-phase.awaiting-approval {
+  background: var(--active);
+  border-color: var(--active);
+  color: var(--bg);
+}
+
+.tm-worktree {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+  max-width: 50%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Task / brief / empty line. */
+.tm-task { margin: 8px 0 0; font-size: 13px; color: var(--ink); }
+.tm-none {
+  margin: 8px 0 0;
+  color: var(--faint);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.tm-k {
+  color: var(--faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-right: 6px;
+}
+
+/* "Doing now" (or "last" when stale). */
+.tm-doing {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--active);
+}
+.tm-doing.stale { color: var(--dim); }
+.tm-action { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tm-when { color: var(--faint); font-size: 11px; white-space: nowrap; }
+
+/* Self-completing checklist. */
+.tm-plan {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.tm-plan-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.tm-plan-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--faint);
+}
+.tm-plan-count {
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.tm-progress {
+  flex: 1;
+  height: 4px;
+  border-radius: 20px;
+  background: var(--border);
+  overflow: hidden;
+}
+.tm-progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--done);
+  border-radius: 20px;
+  transition: width .3s ease;
+}
+
+.tm-plan-list { margin: 0; padding: 0; list-style: none; }
+.tm-plan-item {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  padding: 1px 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+.tm-plan-item.in_progress { color: var(--active); }
+.tm-plan-item.completed {
+  color: var(--done);
+  text-decoration: line-through;
+  opacity: .75;
+}
+.tm-box::before { content: '○'; }
+.tm-plan-item.in_progress .tm-box::before { content: '◐'; }
+.tm-plan-item.completed .tm-box::before { content: '●'; }
+
+/* Checklist reflects phase. 'done' reads fully complete even if plan.json lags;
+   'blocked' tints the progress bar with the attention amber. */
+.tm-plan.is-done .tm-plan-item {
+  color: var(--done);
+  text-decoration: line-through;
+  opacity: .75;
+}
+.tm-plan.is-done .tm-box::before { content: '●'; }
+.tm-plan.is-blocked .tm-progress-fill { background: var(--active); }
+
+/* Approval affordance — rendered only for awaiting-approval rows; lead wires
+   the callbacks, so this is pure presentation with no fetching. */
+.tm-approval {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+}
+.tm-btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+.tm-btn:hover { border-color: var(--dim); }
+.tm-btn-approve {
+  background: var(--done);
+  border-color: var(--done);
+  color: var(--bg);
+  font-weight: 600;
+}
+.tm-btn-approve:hover { border-color: var(--done); opacity: .9; }
+.tm-btn-secondary { background: transparent; color: var(--dim); }
+.tm-btn:disabled { opacity: .45; cursor: not-allowed; }
+.tm-btn:disabled:hover { border-color: var(--border); }
+.tm-approval-hint { font-size: 11px; color: var(--faint); align-self: center; }
+
+/* Small screens: worktree drops to its own line instead of squeezing. */
+@media (max-width: 520px) {
+  .tm-worktree { margin-left: 0; max-width: 100%; flex-basis: 100%; }
+}

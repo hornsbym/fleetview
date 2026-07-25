@@ -1,0 +1,127 @@
+/* Task-board feature — the orchestrator's plan of record.
+   Colors/radius/fonts from tokens only; classes are tb-prefixed to stay clear of
+   the global App.css. Reuses shared .mono from tokens.css. */
+
+.tb-board {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tb-empty {
+  color: var(--faint);
+  font-size: 12px;
+  font-style: italic;
+  padding: 8px 2px;
+}
+
+.tb-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.tb-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.tb-group-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--faint);
+}
+.tb-count {
+  font-size: 10px;
+  line-height: 16px;
+  min-width: 20px;
+  text-align: center;
+  padding: 0 6px;
+  border-radius: 20px;
+  color: var(--dim);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.tb-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.tb-none {
+  margin: 0;
+  color: var(--faint);
+  font-style: italic;
+  font-size: 12px;
+  padding: 1px 2px 3px;
+}
+
+/* Row + state accent (left border): active / upcoming / completed. */
+.tb-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: var(--panel2);
+  border-left: 3px solid var(--faint);
+}
+.tb-row.in_progress { border-left-color: var(--active); }
+.tb-row.pending { border-left-color: var(--pending); }
+.tb-row.completed { border-left-color: var(--done); opacity: .6; }
+
+.tb-subject {
+  flex: 1 1 55%;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.tb-row.completed .tb-subject {
+  color: var(--dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--faint);
+}
+
+.tb-tags {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tb-owner {
+  font-size: 10px;
+  color: var(--dim);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.tb-badge {
+  font-size: 10px;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--dim);
+  border: 1px solid var(--border);
+}
+/* blocked = attention (amber); unblocks = subtle neutral hint. */
+.tb-badge.blocked {
+  color: var(--active);
+  border-color: var(--active);
+}
+
+/* Small screens: tags drop below the subject instead of squeezing it. */
+@media (max-width: 520px) {
+  .tb-tags { margin-left: 0; flex-basis: 100%; }
+}
