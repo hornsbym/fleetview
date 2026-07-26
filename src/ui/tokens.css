@@ -12,6 +12,11 @@
   --active: #d99a2b;
   --done: #3fb950;
   --lead: #58a6ff;
+  /* Semantic states. --attention aliases the amber already used app-wide for
+     "a human must decide" (teammates' awaiting-approval pill); --blocked is the
+     danger hue those surfaces previously lacked and approximated with amber. */
+  --attention: var(--active);
+  --blocked: #f85149;
   --radius: 8px;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

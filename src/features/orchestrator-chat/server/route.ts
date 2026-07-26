@@ -3,10 +3,14 @@
 // the SPA fallback (mirrors handleConfigRoute). Servers report ({ ok, ... }); the
 // UI decides how to render.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { OkResponse, SeqEvent, StatusResponse } from '../shared/events';
+import { readOrchestratorHistory } from '../../../lib/claude-adapter/index';
+import type {
+  HistoryResponse, OkResponse, PermissionDecision, SeqEvent, StatusResponse,
+} from '../shared/events';
 import {
   bufferSince,
   getOrchestratorStatus,
+  respondPermission,
   sendToOrchestrator,
   startOrchestrator,
   stopOrchestrator,
@@ -15,7 +19,7 @@ import {
 
 const HEARTBEAT_MS = 15000;
 
-function json(res: ServerResponse, code: number, body: OkResponse | StatusResponse) {
+function json(res: ServerResponse, code: number, body: OkResponse | StatusResponse | HistoryResponse) {
   res.writeHead(code, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
 }
@@ -90,8 +94,20 @@ export async function handleOrchestratorRoute(
         json(res, 200, { ok: false, reason: 'missing-repo' });
         return true;
       }
-      const { status, sessionId } = getOrchestratorStatus(repo);
-      json(res, 200, { ok: true, status, sessionId });
+      const { status, sessionId, pending } = getOrchestratorStatus(repo);
+      json(res, 200, { ok: true, status, sessionId, pending });
+      return true;
+    }
+
+    if (url.pathname === '/api/orchestrator/history' && method === 'GET') {
+      const repo = url.searchParams.get('repo') || '';
+      const sessionId = url.searchParams.get('sessionId') || '';
+      if (!repo || !sessionId) {
+        json(res, 200, { ok: false, reason: 'missing-params' });
+        return true;
+      }
+      const items = await readOrchestratorHistory(repo, sessionId);
+      json(res, 200, { ok: true, items });
       return true;
     }
 
@@ -105,10 +121,21 @@ export async function handleOrchestratorRoute(
 
       if (url.pathname === '/api/orchestrator/start') {
         const { status, sessionId } = startOrchestrator(repo, {
-          permissionMode: str(body.permissionMode) || undefined,
           model: str(body.model) || undefined,
+          resume: str(body.resume) || undefined,
         });
         json(res, 200, { ok: true, status, sessionId });
+        return true;
+      }
+      if (url.pathname === '/api/orchestrator/permission') {
+        const requestId = str(body.requestId);
+        const decision = str(body.decision) as PermissionDecision;
+        if (!requestId || !['allow', 'deny', 'always'].includes(decision)) {
+          json(res, 200, { ok: false, reason: 'bad-request' });
+          return true;
+        }
+        respondPermission(repo, requestId, decision);
+        json(res, 200, { ok: true });
         return true;
       }
       if (url.pathname === '/api/orchestrator/stop') {

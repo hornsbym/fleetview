@@ -15,6 +15,58 @@
   padding: 8px 2px;
 }
 
+/* Board summary — the at-a-glance completion read above the groups. */
+.tb-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+}
+.tb-summary-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tb-summary-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--faint);
+}
+.tb-summary-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.tb-summary.is-done .tb-summary-count { color: var(--done); }
+.tb-summary-blocked {
+  font-size: 10px;
+  white-space: nowrap;
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--blocked);
+  border: 1px solid var(--blocked);
+}
+
+.tb-meter {
+  height: 4px;
+  border-radius: 20px;
+  background: var(--border);
+  overflow: hidden;
+}
+.tb-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 20px;
+  background: var(--done);
+  transition: width .3s ease;
+}
+
 .tb-group {
   display: flex;
   flex-direction: column;
@@ -44,6 +96,40 @@
   border: 1px solid var(--border);
   font-variant-numeric: tabular-nums;
 }
+
+/* Collapsible group head (Completed). A real button, so keyboard + AT get the
+   disclosure for free; [hidden] on the body must win over any display rule. */
+.tb-group-toggle {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tb-group-toggle:hover .tb-group-title { color: var(--dim); }
+.tb-group-toggle:focus-visible {
+  outline: 2px solid var(--lead);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.tb-chevron {
+  display: inline-block;
+  font-size: 9px;
+  color: var(--faint);
+  transition: transform .15s ease;
+}
+.tb-chevron::before { content: '▸'; }
+.tb-group-toggle[aria-expanded="true"] .tb-chevron { transform: rotate(90deg); }
+.tb-toggle-hint {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--faint);
+}
+.tb-group-toggle:hover .tb-toggle-hint { color: var(--dim); }
+.tb-group-body[hidden] { display: none; }
 
 .tb-list {
   margin: 0;
@@ -115,13 +201,17 @@
   color: var(--dim);
   border: 1px solid var(--border);
 }
-/* blocked = attention (amber); unblocks = subtle neutral hint. */
+/* blocked uses --blocked so one meaning has one color app-wide (matches the
+   project switcher); unblocks stays a subtle neutral hint. */
 .tb-badge.blocked {
-  color: var(--active);
-  border-color: var(--active);
+  color: var(--blocked);
+  border-color: var(--blocked);
 }
 
-/* Small screens: tags drop below the subject instead of squeezing it. */
+/* Small screens: tags drop below the subject instead of squeezing it, and the
+   summary's count/blocked chip wrap to their own line rather than colliding. */
 @media (max-width: 520px) {
   .tb-tags { margin-left: 0; flex-basis: 100%; }
+  .tb-summary-count { margin-left: 0; }
+  .tb-summary-label { flex-basis: 100%; }
 }

@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { HOME, TASKS, TEAMS, PROJECTS, encodeCwd } from './paths';
 import { readActivity, transcriptCwd } from './transcripts';
-import type { Fleet, Project, Session, Task, Teammate, FleetConfig, AgentPlanFile } from '../types';
+import type { Fleet, Project, Session, Task, Teammate, FleetConfig, ControlSnapshot, AgentPlanFile } from '../types';
 
 const pexec = promisify(execFile);
 
@@ -112,7 +112,19 @@ async function discoverSubagents(repoCwd: string, leadSessionId: string): Promis
     .sort((x, y) => Number(x.stale) - Number(y.stale) || x.agentType.localeCompare(y.agentType));
 }
 
-export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
+// Synthesize a minimal live tile for an orchestrator FleetView is driving that
+// hasn't created a team/tasks yet (so buildFleet's disk scan wouldn't find it).
+async function synthLiveSession(repo: string, sessionId: string): Promise<Session> {
+  const lead = newTeammate({ agentId: 'orchestrator', name: 'orchestrator', agentType: 'orchestrator', isLead: true, cwd: repo });
+  const tp = await findTranscript(sessionId);
+  if (tp) { const a = await readActivity(tp); lead.action = a.action; lead.actionAt = a.at; lead.hasTranscript = true; if (a.plan) lead.plan = a.plan; }
+  return {
+    id: sessionId, live: true, owned: true, needsApproval: false, cwd: repo,
+    leadSessionId: sessionId, tasks: [], counts: { pending: 0, in_progress: 0, completed: 0 }, members: [lead],
+  };
+}
+
+export async function buildFleet(config: FleetConfig = {}, control?: ControlSnapshot): Promise<Fleet> {
   const teams = await loadLiveTeams();
   const sessions: any[] = [];
 
@@ -174,6 +186,8 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
     }
 
     s.members = members;
+    s.owned = false;
+    s.needsApproval = false;
     s.counts = {
       pending: (s.tasks as Task[]).filter(t => t.status === 'pending').length,
       in_progress: (s.tasks as Task[]).filter(t => t.status === 'in_progress').length,
@@ -193,6 +207,18 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
   for (const repo of config.repos ?? []) {
     if (!byProject[repo]) byProject[repo] = { path: repo, name: path.basename(repo) || repo, sessions: [], live: false, activeTeammates: 0 };
   }
+
+  // Control-plane merge: a session FleetView is driving is live even after the CLI
+  // deletes its config.json on lead-exit. Annotate the matching tile, or synthesize
+  // one when the orchestrator hasn't created a team/tasks yet.
+  for (const cs of control?.sessions ?? []) {
+    if (cs.status !== 'running' || !cs.sessionId) continue;
+    const proj = byProject[cs.repo] ||= { path: cs.repo, name: path.basename(cs.repo) || cs.repo, sessions: [], live: false, activeTeammates: 0 };
+    const hit = proj.sessions.find(s => s.id === cs.sessionId || s.leadSessionId === cs.sessionId);
+    if (hit) { hit.live = true; hit.owned = true; hit.needsApproval = cs.pendingApprovals > 0; }
+    else { const s = await synthLiveSession(cs.repo, cs.sessionId); s.needsApproval = cs.pendingApprovals > 0; proj.sessions.push(s); }
+  }
+
   const projects = Object.values(byProject).map(p => {
     p.sessions.sort((a, b) => Number(b.live) - Number(a.live) || b.id.localeCompare(a.id));
     p.live = p.sessions.some(s => s.live);

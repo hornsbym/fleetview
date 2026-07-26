@@ -7,7 +7,13 @@ import { DEFAULT_CONFIG, type FleetViewConfig } from '../shared/config';
 
 const CONFIG_PATH = path.join(homedir(), '.fleetview.json');
 
-/** Coerce untrusted JSON into a valid config: unique, trimmed, non-empty repo paths. */
+const cleanStr = (v: unknown): string | undefined => {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s === '' ? undefined : s;
+};
+
+/** Coerce untrusted JSON into a valid config: unique, trimmed repo paths, and
+ *  preserve editor/host (dropping them here silently disabled both features). */
 function normalize(input: unknown): FleetViewConfig {
   const obj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   const repos = Array.isArray(obj.repos)
@@ -20,7 +26,9 @@ function normalize(input: unknown): FleetViewConfig {
         ),
       )
     : [];
-  return { repos };
+  const editor = cleanStr(obj.editor);
+  const host = cleanStr(obj.host);
+  return { repos, ...(editor ? { editor } : {}), ...(host ? { host } : {}) };
 }
 
 export async function readConfig(): Promise<FleetViewConfig> {

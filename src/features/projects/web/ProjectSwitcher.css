@@ -4,6 +4,7 @@
 
 .ps-card {
   display: block;
+  position: relative;
   width: 100%;
   text-align: left;
   background: var(--panel);
@@ -30,3 +31,47 @@
   text-overflow: ellipsis;
 }
 .ps-meta { color: var(--dim); font-size: 11px; margin-top: 6px; }
+
+/* Attention flag — an edge bar, not a border swap, so it composes with .sel's ring
+   instead of fighting it. Amber = a human must decide; red = blocked with none. */
+.ps-card.flagged::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--attention);
+}
+.ps-card.flagged.flag-blocked::before { background: var(--blocked); }
+
+.ps-signals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ps-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+/* Filled amber matches the teammates awaiting-approval pill: the one state that
+   stops until a human answers. Blocked and stalled stay outlined (weaker). */
+.ps-badge.awaiting { background: var(--attention); border-color: var(--attention); color: var(--bg); }
+.ps-badge.blocked { color: var(--blocked); }
+.ps-badge.stalled { color: var(--dim); }
+
+/* Screen-reader-only lead-in, so the badge row reads as "needs attention", not
+   as a bare number. Clipped rather than hidden — hidden text isn't announced. */
+.ps-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

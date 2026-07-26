@@ -3,14 +3,18 @@
 // never reach past it. If Claude Code changes its internals, this is the edit.
 import { execFileSync } from 'node:child_process';
 import { buildFleet } from './internal/fleet';
-import type { Fleet, FleetConfig } from './types';
+import type { ControlSnapshot, Fleet, FleetConfig } from './types';
 
 export * from './types';
 export { createOrchestrator } from './internal/orchestrator';
+export { readOrchestratorHistory } from './internal/history';
 
-/** Monitor plane: a normalized snapshot of every project/session/teammate. */
-export async function readFleet(config: FleetConfig = {}): Promise<Fleet> {
-  return buildFleet(config);
+/** Monitor plane: a normalized snapshot of every project/session/teammate. The
+ *  optional control snapshot merges in what the control plane knows (which sessions
+ *  FleetView is actively driving, and which are parked on an approval) so liveness
+ *  no longer depends on the CLI's config.json, which it deletes when a lead exits. */
+export async function readFleet(config: FleetConfig = {}, control?: ControlSnapshot): Promise<Fleet> {
+  return buildFleet(config, control);
 }
 
 /** Installed Claude Code version — used for graceful degradation later. */

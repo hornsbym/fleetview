@@ -3,8 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20.19" },
-  "bin": { "fleetview": "bin/fleetview.mjs" },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "bin": {
+    "fleetview": "bin/fleetview.mjs"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "server": "tsx watch src/server/main.ts",
@@ -14,6 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.220",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

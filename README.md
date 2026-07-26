@@ -2,12 +2,15 @@
 
 A local, cross-project control-and-monitor dashboard for the Claude Code
 orchestrator + feature-agent (agent-teams) workflow. Watch every project's
-orchestrator and subagents, chat with an orchestrator, and drive plan-gated
-feature work — from one browser tab.
+orchestrator and subagents, open a session to chat with its orchestrator
+(approving tool calls as they happen), resume past sessions, and drive
+plan-gated feature work — from one browser tab.
 
 ## Requirements
 - **Claude Code** (`claude` CLI) installed and authenticated.
 - **Node 20.19+** and **pnpm**.
+- The orchestrator is driven via `@anthropic-ai/claude-agent-sdk` (installed as a
+  dependency; runs server-side only, never bundled into the browser).
 - *(optional)* the `code` (or `cursor`) CLI on PATH for click-to-open-file.
 
 ## Install & run
@@ -50,10 +53,20 @@ build tooling lives. Remove with `npm unlink -g fleetview`.
 ## Two planes
 - **Monitor** (read-only): projects, sessions, task boards, and each teammate's live
   "doing now" line + worktree — read from `~/.claude` (`teams`, `tasks`, `subagents`,
-  transcripts) + `git worktree list`.
-- **Control**: Start/Stop an orchestrator per repo and chat with it (streamed over SSE,
-  with per-turn cost). FleetView spawns the *project's own* `claude` — it does **not**
-  override the project's instructions.
+  transcripts) + `git worktree list`, merged with the control plane so a session
+  FleetView is driving reads as **active** even after the CLI deletes its team file.
+- **Control**: a project shows its session tiles; open one for a dedicated page with the
+  chat plus that session's agents + task board. Live sessions stream over SSE (token count
+  per turn); past sessions replay read-only with a **Resume** button. Starting a second
+  session in a live project warns first (code-conflict risk). FleetView spawns the
+  *project's own* `claude` — it does **not** override the project's instructions.
+
+## Approving tool calls
+The orchestrator asks before running tools that need permission (Bash, git, pnpm, …).
+Each request shows in the chat as an **Approve / Always allow / Deny** card, and the
+project/session tiles badge **needs approval** so you can spot it from the project list.
+"Always allow" won't ask again for that tool this session. (Powered by the SDK's
+`canUseTool` hook — see `src/features/orchestrator-chat/DECISIONS.md`.)
 
 ## Plan-gated feature agents (opt-in)
 If a project's agents follow the convention — write `.fleetview/plan.json` in their

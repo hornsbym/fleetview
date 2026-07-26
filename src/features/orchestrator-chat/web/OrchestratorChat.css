@@ -28,6 +28,17 @@
 .oc-error {
   color: var(--active);
 }
+.oc-history {
+  color: var(--faint);
+}
+.oc-danger {
+  border-color: var(--blocked);
+  color: var(--blocked);
+}
+.oc-danger:hover:not(:disabled) {
+  border-color: var(--blocked);
+  background: var(--panel2);
+}
 .oc-dot {
   width: 8px;
   height: 8px;
@@ -149,6 +160,73 @@
   color: var(--faint);
   font-style: italic;
   text-align: center;
+}
+.oc-histmark {
+  font-size: 10px;
+  color: var(--faint);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 4px 0;
+}
+
+/* Permission approvals — parked tool calls awaiting a decision. */
+.oc-perms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.oc-perm {
+  border: 1px solid var(--attention);
+  border-radius: var(--radius);
+  background: var(--panel);
+  padding: 10px 12px;
+}
+.oc-perm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.oc-perm-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--attention);
+  border: 1px solid var(--attention);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+.oc-perm-tool {
+  font-weight: 600;
+  font-size: 13px;
+}
+.oc-perm-agent {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.oc-perm-body {
+  margin-top: 6px;
+  font-size: 13px;
+}
+.oc-perm-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  overflow-wrap: anywhere;
+}
+.oc-perm-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
 }
 .oc-notice {
   font-size: 11px;
