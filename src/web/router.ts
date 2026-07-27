@@ -43,4 +43,7 @@ export function parseRoute(path: string): Route {
 export const projectPath = (slug: string) => `/p/${encodeURIComponent(slug)}`;
 export const sessionPath = (slug: string, sessionId: string) =>
   `/p/${encodeURIComponent(slug)}/s/${encodeURIComponent(sessionId)}`;
-export const LIVE = 'live';
+// NOTE: v1 had a `LIVE = 'live'` sentinel for "the session FleetView just started".
+// FleetView no longer starts sessions, and every session now has a real id from
+// discovery, so the sentinel — and the "never resolves to a Session" bug it caused
+// — is gone. Session routes are always a real session id.

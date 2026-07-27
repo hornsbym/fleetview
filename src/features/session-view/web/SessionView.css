@@ -262,3 +262,9 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* Read-only marker: FleetView shows the session, the terminal drives it. */
+.oc-readonly {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+}

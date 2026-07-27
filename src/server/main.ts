@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
 import { readFleet, claudeVersion } from '../lib/claude-adapter/index';
 import { handleConfigRoute, readConfig } from '../features/projects/server';
-import { handleOrchestratorRoute, stopAll, controlSnapshot } from '../features/orchestrator-chat/server';
+import { handleSessionRoute } from '../features/session-view/server';
+import { handleHooksRoute } from '../features/hooks/server';
+import { pendingSnapshot, releaseAll } from './bus';
 import { handleOpenRoute } from './open';
 
 const PORT = Number(process.env.PORT) || 4317;
@@ -34,11 +36,12 @@ const server = createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     if (url.pathname === '/api/fleet') {
       const cfg = await readConfig();
-      return send(res, 200, JSON.stringify(await readFleet({ repos: cfg.repos }, controlSnapshot())));
+      return send(res, 200, JSON.stringify(await readFleet({ repos: cfg.repos }, pendingSnapshot())));
     }
     if (url.pathname === '/api/health') return send(res, 200, JSON.stringify({ ok: true, claude: claudeVersion() }));
     if (await handleConfigRoute(req, res)) return;
-    if (await handleOrchestratorRoute(req, res)) return;
+    if (await handleSessionRoute(req, res)) return;
+    if (await handleHooksRoute(req, res)) return;
     if (await handleOpenRoute(req, res)) return;
 
     // static SPA (prod only; dev is served by Vite)
@@ -78,19 +81,20 @@ function lanUrls(port: number): string[] {
     if (exposed) {
       for (const u of lanUrls(PORT)) process.stdout.write(`FleetView LAN → ${u}\n`);
       process.stdout.write(
-        '⚠  FleetView is UNAUTHENTICATED and can drive orchestrators, open files, and read ~/.claude.\n' +
+        '⚠  FleetView is UNAUTHENTICATED and can approve tool calls, open files, and read ~/.claude.\n' +
         '   Exposing on the LAN means anyone on this network can too — use only on a trusted network.\n',
       );
     }
   });
 })();
 
-// Never leak spawned orchestrators: stop them all on shutdown.
+// FleetView owns no processes, but it may be HOLDING permission hook responses —
+// release them on shutdown so no terminal session is left blocked waiting on us.
 let shuttingDown = false;
 function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
-  stopAll();
+  releaseAll();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 1500).unref();
 }

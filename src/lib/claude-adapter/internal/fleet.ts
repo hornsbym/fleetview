@@ -1,12 +1,24 @@
-// Monitor-plane assembly: read teams + tasks + subagents + worktrees + transcripts
-// and normalize into FleetView's own Fleet shape. All Claude Code coupling lives here.
+// Monitor-plane assembly. FleetView observes Claude Code sessions; it never owns
+// one, so discovery must not depend on ownership.
+//
+// Discovery order (this is the important change from v1):
+//   1. `claude agents --json`  -> every LIVE session, with real liveness.
+//   2. SDK listSessions(dir)   -> every session on disk for a watched repo.
+//   3. ~/.claude/{tasks,teams} -> ENRICHMENT ONLY (task boards, team rosters).
+//
+// v1 discovered from (3) alone, which made terminal-started sessions invisible:
+// a session with neither a tasks/ nor a teams/ dir produced no tile at all.
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { HOME, TASKS, TEAMS, PROJECTS, encodeCwd } from './paths';
 import { readActivity, transcriptCwd } from './transcripts';
-import type { Fleet, Project, Session, Task, Teammate, FleetConfig, ControlSnapshot, AgentPlanFile } from '../types';
+import { liveSessions, knownSessions, canonicalSessionId } from './sessions';
+import type {
+  Fleet, Project, Session, Task, Teammate, FleetConfig, PendingSnapshot,
+  AgentPlanFile, LiveSession, KnownSession,
+} from '../types';
 
 const pexec = promisify(execFile);
 
@@ -31,13 +43,16 @@ async function loadLiveTeams(): Promise<Record<string, any>> {
   return out;
 }
 
-async function findTranscript(id: string): Promise<string | null> {
-  if (!id) return null;
-  const prefix = id.startsWith('session-') ? id.slice(8) : id;
+// A session's transcript is <projects>/<encodeCwd(cwd)>/<sessionId>.jsonl. When cwd
+// is known this is a direct hit; the scan is only a fallback for orphaned ids.
+async function transcriptPath(sessionId: string, cwd: string | null): Promise<string | null> {
+  if (cwd) {
+    const direct = path.join(PROJECTS, encodeCwd(cwd), `${sessionId}.jsonl`);
+    try { await stat(direct); return direct; } catch { /* fall through */ }
+  }
   for (const pd of await listDirs(PROJECTS)) {
-    let files: string[]; try { files = await readdir(path.join(PROJECTS, pd)); } catch { continue; }
-    const hit = files.find(f => f.endsWith('.jsonl') && (f === id + '.jsonl' || f.startsWith(prefix)));
-    if (hit) return path.join(PROJECTS, pd, hit);
+    const p = path.join(PROJECTS, pd, `${sessionId}.jsonl`);
+    try { await stat(p); return p; } catch { /* keep looking */ }
   }
   return null;
 }
@@ -78,10 +93,12 @@ function applyPlanFile(t: Teammate, pf: AgentPlanFile | null) {
   }
 }
 
-// Feature/worktree agents are spawned via Agent tool + isolation:worktree; they do
-// NOT register in the team roster. Discover them from the subagents/ dir + meta.json.
-async function discoverSubagents(repoCwd: string, leadSessionId: string): Promise<Teammate[]> {
-  const dir = path.join(PROJECTS, encodeCwd(repoCwd), leadSessionId, 'subagents');
+// Feature/worktree agents are spawned via the Agent tool and do NOT register in the
+// team roster, so they're discovered from the session's subagents/ dir + meta.json.
+// This works identically for terminal-started sessions — verified: a session started
+// in a terminal had six agent-*.jsonl pairs here.
+async function discoverSubagents(repoCwd: string, sessionId: string): Promise<Teammate[]> {
+  const dir = path.join(PROJECTS, encodeCwd(repoCwd), sessionId, 'subagents');
   let files: string[]; try { files = (await readdir(dir)).filter(f => /^agent-.*\.jsonl$/.test(f)); } catch { return []; }
   const wt = await worktreeAgents(repoCwd);
   const out: Teammate[] = [];
@@ -93,7 +110,7 @@ async function discoverSubagents(repoCwd: string, leadSessionId: string): Promis
     const a = await readActivity(full);
     const t = newTeammate({
       agentId: id,
-      name: meta.agentType || `agent-${id.slice(0, 8)}`,
+      name: meta.name || meta.agentType || `agent-${id.slice(0, 8)}`,
       agentType: meta.agentType || `agent-${id.slice(0, 8)}`,
       desc: meta.description || '',
       isLead: false,
@@ -106,123 +123,198 @@ async function discoverSubagents(repoCwd: string, leadSessionId: string): Promis
     if (t.cwd) applyPlanFile(t, await readAgentPlan(t.cwd));
     out.push(t);
   }
-  // Worktree agents + anything currently active; drop finished ephemeral helpers.
-  return out
-    .filter(s => s.cwd || !s.stale)
-    .sort((x, y) => Number(x.stale) - Number(y.stale) || x.agentType.localeCompare(y.agentType));
+  // Report every agent; the UI decides what to show (house rule). v1 dropped stale
+  // non-worktree agents here, which meant any session whose agents had finished
+  // rendered "no teammates" — the opposite of a tool for mapping parallel work.
+  // `stale` is carried through so the UI can de-emphasize finished agents.
+  return out.sort((x, y) => Number(x.stale) - Number(y.stale) || x.agentType.localeCompare(y.agentType));
 }
 
-// Synthesize a minimal live tile for an orchestrator FleetView is driving that
-// hasn't created a team/tasks yet (so buildFleet's disk scan wouldn't find it).
-async function synthLiveSession(repo: string, sessionId: string): Promise<Session> {
-  const lead = newTeammate({ agentId: 'orchestrator', name: 'orchestrator', agentType: 'orchestrator', isLead: true, cwd: repo });
-  const tp = await findTranscript(sessionId);
-  if (tp) { const a = await readActivity(tp); lead.action = a.action; lead.actionAt = a.at; lead.hasTranscript = true; if (a.plan) lead.plan = a.plan; }
+interface Draft {
+  id: string;
+  cwd: string | null;
+  live: boolean;
+  name: string | null;
+  kind: 'interactive' | 'background' | null;
+  status: string | null;
+  waitingFor: string | null;
+  pid: number | null;
+  gitBranch: string | null;
+  lastActiveAt: number | null;
+  tasks: Task[];
+  team: any | null;
+}
+
+function draft(id: string): Draft {
   return {
-    id: sessionId, live: true, owned: true, needsApproval: false, cwd: repo,
-    leadSessionId: sessionId, tasks: [], counts: { pending: 0, in_progress: 0, completed: 0 }, members: [lead],
+    id, cwd: null, live: false, name: null, kind: null, status: null, waitingFor: null,
+    pid: null, gitBranch: null, lastActiveAt: null, tasks: [], team: null,
   };
 }
 
-export async function buildFleet(config: FleetConfig = {}, control?: ControlSnapshot): Promise<Fleet> {
-  const teams = await loadLiveTeams();
-  const sessions: any[] = [];
+export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnapshot): Promise<Fleet> {
+  // --- 1. Live sessions: the authoritative liveness signal, ownership-independent.
+  const live = await liveSessions();
 
+  // --- 2. On-disk sessions for every repo we care about (watched + wherever
+  //        something is live right now).
+  const repos = new Set<string>([...(config.repos ?? []), ...live.map(l => l.cwd)]);
+  const known: KnownSession[] = [];
+  for (const repo of repos) known.push(...await knownSessions(repo));
+
+  // Canonical id universe, used to resolve truncated `session-<8hex>` task dirs.
+  const allIds = new Set<string>([...live.map(l => l.sessionId), ...known.map(k => k.sessionId)]);
+
+  const drafts = new Map<string, Draft>();
+  const get = (id: string) => { let d = drafts.get(id); if (!d) drafts.set(id, d = draft(id)); return d; };
+
+  for (const l of live as LiveSession[]) {
+    const d = get(l.sessionId);
+    d.live = true;
+    d.cwd = l.cwd;
+    d.name = l.name;
+    d.kind = l.kind;
+    d.status = l.status;
+    d.waitingFor = l.waitingFor;
+    d.pid = l.pid;
+    d.lastActiveAt = l.startedAt;
+  }
+  for (const k of known) {
+    const d = get(k.sessionId);
+    d.cwd ||= k.cwd;
+    d.name ||= k.summary || null;
+    d.gitBranch ||= k.gitBranch;
+    if (k.lastModified && (!d.lastActiveAt || k.lastModified > d.lastActiveAt)) d.lastActiveAt = k.lastModified;
+  }
+
+  // --- 3. Enrichment from ~/.claude/{tasks,teams}. These no longer create tiles on
+  //        their own unless they resolve to a real session — an unresolvable
+  //        `session-<8hex>` dir is an orphan (transcript cleaned up) and is dropped.
+  const teams = await loadLiveTeams();
   for (const dir of await listDirs(TASKS)) {
-    const tasks = await loadTasks(path.join(TASKS, dir));
-    const team = teams[dir] || null;
-    if (!tasks.length && !team) continue;
-    let cwd: string | null = null;
-    if (team) { const lead = (team.members || []).find((m: any) => m.agentId === team.leadAgentId) || team.members?.[0]; cwd = lead?.cwd || null; }
-    if (!cwd) cwd = await transcriptCwd(await findTranscript(dir));
-    sessions.push({ id: dir, live: !!team, team, tasks, cwd, leadSessionId: team?.leadSessionId || null });
+    const id = canonicalSessionId(dir, allIds);
+    if (!id) continue;
+    const d = get(id);
+    d.tasks = await loadTasks(path.join(TASKS, dir));
+    d.team ||= teams[dir] || null;
   }
   for (const [name, team] of Object.entries<any>(teams)) {
-    if (sessions.some(s => s.id === name)) continue;
-    const lead = (team.members || []).find((m: any) => m.agentId === team.leadAgentId) || team.members?.[0];
-    sessions.push({ id: name, live: true, team, tasks: [], cwd: lead?.cwd || null, leadSessionId: team.leadSessionId || null });
+    const id = canonicalSessionId(name, allIds);
+    if (!id) continue;
+    const d = get(id);
+    d.team ||= team;
+    if (!d.cwd) {
+      const lead = (team.members || []).find((m: any) => m.agentId === team.leadAgentId) || team.members?.[0];
+      d.cwd = lead?.cwd || null;
+    }
   }
 
-  for (const s of sessions) {
+  // --- 4. Build the public Session for each draft.
+  const sessions: Session[] = [];
+  for (const d of drafts.values()) {
+    if (!d.cwd) d.cwd = await transcriptCwd(await transcriptPath(d.id, null));
+
     let members: Teammate[];
-    if (s.team) {
-      members = (s.team.members || []).map((m: any) => newTeammate({
+    if (d.team) {
+      members = (d.team.members || []).map((m: any) => newTeammate({
         agentId: m.agentId, name: m.name, agentType: m.agentType,
-        isLead: m.agentId === s.team.leadAgentId, cwd: m.cwd || null,
+        isLead: m.agentId === d.team.leadAgentId, cwd: m.cwd || null,
       }));
-      for (const t of s.tasks as Task[]) {
+      for (const t of d.tasks) {
         if (t.owner && !members.some(m => m.name === t.owner || m.agentType === t.owner))
-          members.push(newTeammate({ agentId: t.owner, name: t.owner, agentType: t.owner, isLead: t.owner === 'orchestrator' }));
+          members.push(newTeammate({ agentId: t.owner, name: t.owner, agentType: t.owner, isLead: false }));
       }
     } else {
-      members = [...new Set((s.tasks as Task[]).map(t => t.owner).filter(Boolean))]
-        .map((o: any) => newTeammate({ agentId: o, name: o, agentType: o, isLead: o === 'orchestrator' }));
+      members = [...new Set(d.tasks.map(t => t.owner).filter(Boolean))]
+        .map((o: any) => newTeammate({ agentId: o, name: o, agentType: o, isLead: false }));
     }
 
-    const ownedBy = (m: Teammate) => (s.tasks as Task[]).filter(t => t.owner === m.name || t.owner === m.agentType);
+    // The lead ALWAYS exists — it is the session itself. v1 only synthesized this
+    // for sessions it owned, which is why the orchestrator's own row vanished the
+    // moment a tasks/ or teams/ dir appeared (FUTURE.md).
+    if (!members.some(m => m.isLead)) {
+      members.unshift(newTeammate({
+        agentId: 'lead', name: d.name || 'session', agentType: 'orchestrator', isLead: true, cwd: d.cwd,
+      }));
+    }
+
+    const ownedBy = (m: Teammate) => d.tasks.filter(t => t.owner === m.name || t.owner === m.agentType);
     for (const m of members) {
-      const ip = (s.tasks as Task[]).find(t => t.status === 'in_progress' && (t.owner === m.name || t.owner === m.agentType));
+      const ip = d.tasks.find(t => t.status === 'in_progress' && (t.owner === m.name || t.owner === m.agentType));
       m.task = ip ? { subject: ip.subject, activeForm: ip.activeForm } : null;
       const owned = ownedBy(m);
       if (owned.length) m.plan = owned.map(t => ({ content: t.subject, status: t.status }));
-      if (m.isLead && s.leadSessionId) {
-        const tp = await findTranscript(s.leadSessionId);
-        if (tp) { const a = await readActivity(tp); m.action = a.action; m.actionAt = a.at; m.hasTranscript = true; if (a.plan) m.plan = a.plan; }
+      if (m.isLead) {
+        const tp = await transcriptPath(d.id, d.cwd);
+        if (tp) {
+          const a = await readActivity(tp);
+          m.action = a.action; m.actionAt = a.at; m.hasTranscript = true;
+          if (a.plan) m.plan = a.plan;
+        }
       }
     }
 
-    if (s.live && s.leadSessionId && s.cwd) {
-      for (const sub of await discoverSubagents(s.cwd, s.leadSessionId)) {
+    // Subagent discovery is gated on cwd alone — NOT on liveness. A session that
+    // has stopped still has teammates worth showing.
+    if (d.cwd) {
+      for (const sub of await discoverSubagents(d.cwd, d.id)) {
         // A self-reported plan file (sub.phase set) is authoritative; otherwise
         // fall back to the harness task list grouped by owner.
         if (!sub.phase) {
-          const owned = (s.tasks as Task[]).filter(t => t.owner === sub.agentType || t.owner === sub.name);
+          const owned = d.tasks.filter(t => t.owner === sub.agentType || t.owner === sub.name);
           if (owned.length && !sub.plan) sub.plan = owned.map(t => ({ content: t.subject, status: t.status }));
-          const ip = (s.tasks as Task[]).find(t => t.status === 'in_progress' && (t.owner === sub.agentType || t.owner === sub.name));
+          const ip = d.tasks.find(t => t.status === 'in_progress' && (t.owner === sub.agentType || t.owner === sub.name));
           if (ip) sub.task = { subject: ip.subject, activeForm: ip.activeForm };
         }
-        members.push(sub);
+        if (!members.some(m => m.agentId === sub.agentId)) members.push(sub);
       }
     }
 
-    s.members = members;
-    s.owned = false;
-    s.needsApproval = false;
-    s.counts = {
-      pending: (s.tasks as Task[]).filter(t => t.status === 'pending').length,
-      in_progress: (s.tasks as Task[]).filter(t => t.status === 'in_progress').length,
-      completed: (s.tasks as Task[]).filter(t => t.status === 'completed').length,
-    };
-    delete s.team;
+    const pendingApprovals = pending?.pendingBySession[d.id] ?? 0;
+    sessions.push({
+      id: d.id,
+      live: d.live,
+      attached: d.live,
+      needsApproval: pendingApprovals > 0,
+      pendingApprovals,
+      cwd: d.cwd,
+      leadSessionId: d.id,
+      name: d.name,
+      kind: d.kind,
+      status: d.status,
+      waitingFor: d.waitingFor,
+      pid: d.pid,
+      gitBranch: d.gitBranch,
+      lastActiveAt: d.lastActiveAt,
+      tasks: d.tasks,
+      counts: {
+        pending: d.tasks.filter(t => t.status === 'pending').length,
+        in_progress: d.tasks.filter(t => t.status === 'in_progress').length,
+        completed: d.tasks.filter(t => t.status === 'completed').length,
+      },
+      members,
+    });
   }
 
+  // --- 5. Bucket into projects. Watched repos are ADDITIVE, never a filter.
   const byProject: Record<string, Project> = {};
-  for (const s of sessions) {
-    const key = s.cwd || '(unknown project)';
-    (byProject[key] ||= { path: key, name: path.basename(key) || key, sessions: [], live: false, activeTeammates: 0 }).sessions.push(s as Session);
-  }
-  // Watched repos are ADDITIVE, never a filter: they always appear as projects
-  // (even with no activity yet, ready to host an orchestrator), and discovered
-  // active work is always shown regardless of config.
-  for (const repo of config.repos ?? []) {
-    if (!byProject[repo]) byProject[repo] = { path: repo, name: path.basename(repo) || repo, sessions: [], live: false, activeTeammates: 0 };
-  }
+  const mkProject = (key: string): Project =>
+    (byProject[key] ||= { path: key, name: path.basename(key) || key, sessions: [], live: false, activeTeammates: 0 });
 
-  // Control-plane merge: a session FleetView is driving is live even after the CLI
-  // deletes its config.json on lead-exit. Annotate the matching tile, or synthesize
-  // one when the orchestrator hasn't created a team/tasks yet.
-  for (const cs of control?.sessions ?? []) {
-    if (cs.status !== 'running' || !cs.sessionId) continue;
-    const proj = byProject[cs.repo] ||= { path: cs.repo, name: path.basename(cs.repo) || cs.repo, sessions: [], live: false, activeTeammates: 0 };
-    const hit = proj.sessions.find(s => s.id === cs.sessionId || s.leadSessionId === cs.sessionId);
-    if (hit) { hit.live = true; hit.owned = true; hit.needsApproval = cs.pendingApprovals > 0; }
-    else { const s = await synthLiveSession(cs.repo, cs.sessionId); s.needsApproval = cs.pendingApprovals > 0; proj.sessions.push(s); }
-  }
+  for (const s of sessions) mkProject(s.cwd || '(unknown project)').sessions.push(s);
+  for (const repo of config.repos ?? []) mkProject(repo);
 
   const projects = Object.values(byProject).map(p => {
-    p.sessions.sort((a, b) => Number(b.live) - Number(a.live) || b.id.localeCompare(a.id));
+    p.sessions.sort((a, b) =>
+      Number(b.live) - Number(a.live) ||
+      (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0) ||
+      b.id.localeCompare(a.id));
     p.live = p.sessions.some(s => s.live);
-    p.activeTeammates = p.sessions.filter(s => s.live).flatMap(s => s.members.filter(m => !m.isLead)).length;
+    // "Active" means actually working right now — a finished agent still listed on
+    // the session page must not inflate this count.
+    p.activeTeammates = p.sessions
+      .filter(s => s.live)
+      .flatMap(s => s.members.filter(m => !m.isLead && !m.stale)).length;
     return p;
   }).sort((a, b) => Number(b.live) - Number(a.live) || a.name.localeCompare(b.name));
 
