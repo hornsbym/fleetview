@@ -144,6 +144,14 @@ export interface FleetConfig {
  */
 export interface PendingSnapshot {
   pendingBySession: Record<string, number>;
+  /**
+   * cwd per session with a parked request. A permission can arrive from a session
+   * discovery hasn't indexed yet — a brand-new one blocked on its very first tool
+   * call never registers with `claude agents --json` — and without somewhere to
+   * render the card the whole approve-from-the-browser flow is unusable exactly
+   * when it matters most.
+   */
+  cwdBySession?: Record<string, string>;
 }
 
 // --- Permissions: answering a question the session asked (hook bridge) ---

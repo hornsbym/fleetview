@@ -119,11 +119,13 @@ export function pendingPermissions(sessionId?: string): PermissionRequest[] {
 /** Per-session counts for the fleet snapshot's attention badges. */
 export function pendingSnapshot(): PendingSnapshot {
   const pendingBySession: Record<string, number> = {};
+  const cwdBySession: Record<string, string> = {};
   for (const p of parked.values()) {
     const k = groupOf(p.req);
     pendingBySession[k] = (pendingBySession[k] ?? 0) + 1;
+    if (p.req.cwd) cwdBySession[k] = p.req.cwd;
   }
-  return { pendingBySession };
+  return { pendingBySession, cwdBySession };
 }
 
 /** Release everything on shutdown so no terminal session is left blocked. */

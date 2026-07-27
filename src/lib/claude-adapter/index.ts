@@ -7,7 +7,7 @@
 // no way to spawn, message, resume or stop a session from here — see PLAN.md.
 import { execFileSync } from 'node:child_process';
 import { buildFleet } from './internal/fleet';
-import type { PendingSnapshot, Fleet, FleetConfig } from './types';
+import type { PendingSnapshot, Fleet, FleetConfig, Session } from './types';
 
 export * from './types';
 export { readSessionHistory, readSubagentHistory } from './internal/history';
@@ -50,15 +50,52 @@ function cachedFleet(config: FleetConfig): Promise<Fleet> {
 function withPending(fleet: Fleet, pending?: PendingSnapshot): Fleet {
   const counts = pending?.pendingBySession;
   if (!counts || Object.keys(counts).length === 0) return fleet;
+
+  const seen = new Set<string>();
+  const projects = fleet.projects.map(p => ({
+    ...p,
+    sessions: p.sessions.map(s => {
+      const n = counts[s.id] ?? 0;
+      if (n > 0) seen.add(s.id);
+      return n === s.pendingApprovals ? s : { ...s, pendingApprovals: n, needsApproval: n > 0 };
+    }),
+  }));
+
+  // A request can arrive from a session discovery hasn't indexed. Measured: a
+  // session blocked on its very first tool call never registers with
+  // `claude agents --json` and has written no transcript, so it produced no tile —
+  // and a card with nowhere to render is a card you cannot click. Surface a
+  // minimal session for it, in the right project, from what the hook told us.
+  const cwds = pending?.cwdBySession ?? {};
+  const byPath = new Map(projects.map(p => [p.path, p]));
+  for (const [sessionId, n] of Object.entries(counts)) {
+    if (n <= 0 || seen.has(sessionId)) continue;
+    const cwd = cwds[sessionId] ?? null;
+    const key = cwd ?? '(unknown project)';
+    let project = byPath.get(key);
+    if (!project) {
+      project = { path: key, name: key.split('/').pop() || key, sessions: [], live: true, activeTeammates: 0 };
+      byPath.set(key, project);
+      projects.push(project);
+    }
+    project.live = true;
+    project.sessions = [pendingOnlySession(sessionId, cwd, n), ...project.sessions];
+  }
+
+  return { ...fleet, projects };
+}
+
+/** The minimum a session page needs to render an approval card for a session we
+ *  know nothing else about yet. Everything unknown stays null rather than guessed. */
+function pendingOnlySession(id: string, cwd: string | null, pendingApprovals: number): Session {
   return {
-    ...fleet,
-    projects: fleet.projects.map(p => ({
-      ...p,
-      sessions: p.sessions.map(s => {
-        const n = counts[s.id] ?? 0;
-        return n === s.pendingApprovals ? s : { ...s, pendingApprovals: n, needsApproval: n > 0 };
-      }),
-    })),
+    id, live: true, attached: true,
+    needsApproval: true, pendingApprovals,
+    cwd, leadSessionId: id,
+    name: null, kind: null, status: 'waiting', waitingFor: 'permission request',
+    pid: null, gitBranch: null, lastActiveAt: Date.now(),
+    tasks: [], counts: { pending: 0, in_progress: 0, completed: 0 },
+    members: [],
   };
 }
 
