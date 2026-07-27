@@ -1,4 +1,5 @@
 import type { Teammate } from '../../../lib/claude-adapter/types';
+import { rosterOf, type SessionState } from '../shared/roster';
 import { TeammateRow } from './TeammateRow';
 import './Teammates.css';
 
@@ -8,24 +9,34 @@ export interface TeammatesProps {
   onApprove?: (m: Teammate) => void;
   /** Ask a plan-gated agent to revise its plan. Secondary button hides when absent. */
   onRequestChanges?: (m: Teammate) => void;
-  /** False disables the approval buttons (FleetView has no running orchestrator for
-   *  this repo, so approving would misfire). Defaults to enabled. */
+  /** False disables the approval buttons. Defaults to enabled. */
   approvable?: boolean;
+  /** Session liveness + status. A stopped or idle session has no working agents. */
+  session?: SessionState;
 }
 
-/** Live per-agent activity surface for a session. Lead pinned first.
-    Pure presentational: props in, no fetching — the caller wires callbacks. */
-export function Teammates({ members, onApprove, onRequestChanges, approvable = true }: TeammatesProps) {
-  if (!members || members.length === 0) {
-    return <p className="tm-empty">No agents in this session yet.</p>;
-  }
+/**
+ * Live per-agent activity surface for a session. Lead pinned first.
+ *
+ * Shows only agents that are actually running. Agents that have finished are
+ * deliberately NOT rendered — this panel answers "who is working right now", and
+ * a session that spawned twenty one-off helpers over an hour would otherwise bury
+ * that answer under a list of the dead. The adapter still reports them (servers
+ * report, UIs decide), so a history view can surface them later if it's ever
+ * wanted.
+ *
+ * Pure presentational: props in, no fetching — the caller wires callbacks.
+ */
+export function Teammates({ members, onApprove, onRequestChanges, approvable = true, session }: TeammatesProps) {
+  const { active } = rosterOf(members ?? [], session ?? {});
 
-  // Lead(s) first; sort is stable so incoming order is otherwise preserved.
-  const ordered = [...members].sort((a, b) => Number(b.isLead) - Number(a.isLead));
+  if (active.length === 0) {
+    return <p className="tm-empty">No agents working in this session.</p>;
+  }
 
   return (
     <div className="tm-list">
-      {ordered.map((m) => (
+      {active.map((m) => (
         <TeammateRow
           key={m.agentId}
           m={m}

@@ -1,17 +1,12 @@
-// Read-only replay of a past session's transcript, normalized into ChatItem[] so a
-// dead session's page can show its prior conversation before you Resume it. Uses the
-// SDK's getSessionMessages (the official, format-robust reader) rather than parsing
-// JSONL by hand — same firewall principle as the rest of the adapter.
-import { getSessionMessages } from '@anthropic-ai/claude-agent-sdk';
+// Read-only replay of a session's transcript, normalized into ChatItem[].
+//
+// Uses the SDK's getSessionMessages / getSubagentMessages (the official,
+// format-robust readers) rather than parsing JSONL by hand — same firewall
+// principle as the rest of the adapter. Both work against sessions FleetView
+// does not own, including ones that are live at read time.
+import { getSessionMessages, getSubagentMessages } from '@anthropic-ai/claude-agent-sdk';
+import { summarizeTool } from './transcripts';
 import type { ChatItem } from '../types';
-
-/** Compact one-liner for a tool call's input (mirrors the live chat's toolSummary). */
-function toolSummary(input: unknown): string {
-  const i = (input ?? {}) as Record<string, unknown>;
-  const pick = i.command ?? i.file_path ?? i.path ?? i.pattern ?? i.description ?? i.prompt;
-  if (typeof pick === 'string') return pick;
-  try { const s = JSON.stringify(i); return s && s !== '{}' ? s : ''; } catch { return ''; }
-}
 
 function textOf(content: unknown): string {
   if (typeof content === 'string') return content;
@@ -19,10 +14,9 @@ function textOf(content: unknown): string {
   return content.filter((b: any) => b?.type === 'text').map((b: any) => b.text).join('');
 }
 
-export async function readOrchestratorHistory(_repo: string, sessionId: string): Promise<ChatItem[]> {
-  let msgs: Awaited<ReturnType<typeof getSessionMessages>>;
-  try { msgs = await getSessionMessages(sessionId); } catch { return []; }
+type SessionMessage = Awaited<ReturnType<typeof getSessionMessages>>[number];
 
+function normalize(msgs: SessionMessage[]): ChatItem[] {
   const items: ChatItem[] = [];
   for (const m of msgs) {
     const msg = m.message as { role?: string; content?: unknown } | undefined;
@@ -39,9 +33,24 @@ export async function readOrchestratorHistory(_repo: string, sessionId: string):
       const text = textOf(c);
       if (text.trim()) items.push({ kind: 'assistant', text });
       for (const b of c as any[]) {
-        if (b?.type === 'tool_use') items.push({ kind: 'tool', name: b.name ?? 'tool', summary: toolSummary(b.input) });
+        // summarizeTool prefers Bash's own `description` over the raw command —
+        // the human-readable text the model already wrote. v1 had a second, worse
+        // copy of this here that made `description` unreachable (FUTURE.md).
+        if (b?.type === 'tool_use') {
+          items.push({ kind: 'tool', name: b.name ?? 'tool', summary: summarizeTool(b.name, b.input) });
+        }
       }
     }
   }
   return items;
+}
+
+/** Full transcript for a session, live or past. Never throws. */
+export async function readSessionHistory(sessionId: string): Promise<ChatItem[]> {
+  try { return normalize(await getSessionMessages(sessionId)); } catch { return []; }
+}
+
+/** Transcript for one subagent within a session — the read-only teammate page. */
+export async function readSubagentHistory(sessionId: string, agentId: string): Promise<ChatItem[]> {
+  try { return normalize(await getSubagentMessages(sessionId, agentId)); } catch { return []; }
 }

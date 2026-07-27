@@ -1,0 +1,93 @@
+/* "Working on now" + "Done so far". Tokens only. */
+.dg {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px;
+}
+.dg-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dg-head h3 {
+  margin: 0; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--faint); font-weight: 600;
+}
+.dg-count {
+  font-size: 10px; line-height: 16px; min-width: 20px; text-align: center;
+  padding: 0 6px; border-radius: 20px; color: var(--faint); border: 1px solid var(--border);
+}
+.dg-pulse {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--done); animation: pulse 1.6s infinite;
+}
+.dg-none { margin: 0; color: var(--faint); font-size: 12px; }
+
+/* Toward: the request this work is serving. */
+.dg-prose { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--ink); }
+.dg-src {
+  margin-left: auto; font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+}
+.dg-goal {
+  font-size: 12px; color: var(--dim); line-height: 1.45;
+  padding-top: 8px; border-top: 1px solid var(--border);
+}
+.dg-goal-text {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.dg-goal-label {
+  display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--faint); margin-bottom: 3px;
+}
+
+.dg-when { margin-left: auto; color: var(--faint); font-size: 10px; flex-shrink: 0; }
+
+
+.dg-counts {
+  display: flex; gap: 12px; margin-top: 10px; padding-top: 8px;
+  border-top: 1px solid var(--border); font-size: 10px; color: var(--faint);
+}
+
+/* Milestones */
+/* Numbered, not scrollable: the component collapses instead, so a long session
+   can't push Team/Task board off the column. Numbers count with time, so a higher
+   number is always more recent and the newest entry sits last. */
+.dg-list {
+  margin: 0; padding: 0 0 0 26px;
+  list-style: decimal;
+}
+.dg-list::marker { color: var(--faint); }
+.dg-list li::marker { color: var(--faint); font-size: 11px; font-family: var(--mono); }
+.dg-item { padding: 5px 0; font-size: 12px; }
+.dg-item::marker { font-variant-numeric: tabular-nums; }
+.dg-item + .dg-item { border-top: 1px solid var(--border); }
+/* Kind is now a trailing tag on the text, not a leading column — the number
+   occupies that slot. Self-reported items carry no tag at all. */
+.dg-kind {
+  margin-left: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+  color: var(--faint); white-space: nowrap;
+}
+.dg-commit .dg-kind { color: var(--done); border-color: var(--done); }
+.dg-task .dg-kind { color: var(--lead); border-color: var(--lead); }
+.dg-plan .dg-kind { color: var(--attention); border-color: var(--attention); }
+.dg-text { color: var(--ink); line-height: 1.45; }
+.dg-when { display: block; margin-top: 2px; color: var(--faint); font-size: 10px; }
+/* A compaction is context, not an accomplishment — de-emphasize it. */
+.dg-compaction .dg-text { color: var(--faint); font-style: italic; }
+
+.dg-none code { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+/* Idle is a real state, not an absence of data — say so plainly, in the same
+   voice as the rest of the panel rather than as an error. */
+.dg-idle { margin: 0; font-size: 13px; line-height: 1.55; color: var(--dim); }
+.dg-blocked { color: var(--attention); }
+
+/* Expand/collapse for the whole list. */
+.dg-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  margin-top: 8px; padding: 6px 0 0; border: 0; border-top: 1px solid var(--border);
+  background: none; color: var(--faint); font: inherit; font-size: 11px;
+  cursor: pointer; text-align: left;
+}
+.dg-toggle:hover { color: var(--dim); }
+.dg-toggle:focus-visible { outline: 1px solid var(--lead); outline-offset: 2px; }
+.dg-chevron { display: inline-block; font-size: 9px; transition: transform .15s ease; }
+.dg-chevron::before { content: '\25B8'; }
+.dg-toggle[aria-expanded="true"] .dg-chevron { transform: rotate(90deg); }

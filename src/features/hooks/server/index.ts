@@ -1,0 +1,1 @@
+export { handleHooksRoute } from './route';

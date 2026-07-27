@@ -1,0 +1,1 @@
+export { handleSessionRoute } from './route';

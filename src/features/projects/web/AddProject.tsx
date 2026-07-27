@@ -1,6 +1,6 @@
 // Add/remove watched repo paths. Owns its own config fetch; reports changes up via
 // onConfigChange so the parent can re-poll the fleet. Server also validates on add.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConfigRequest, ConfigResponse, FleetViewConfig } from '../shared/config';
 import './AddProject.css';
 
@@ -31,14 +31,21 @@ export function AddProject({ onConfigChange }: AddProjectProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const apply = useCallback(
-    (config: FleetViewConfig) => {
-      setRepos(config.repos);
-      onConfigChange?.(config);
-    },
-    [onConfigChange],
-  );
+  // Held in a ref, NOT a dependency. Callers pass an inline arrow, so depending on
+  // its identity made `apply` — and the effect below — new on every render. That
+  // was an infinite loop: fetch config -> onConfigChange -> parent re-renders ->
+  // new arrow -> new apply -> effect re-runs -> fetch config… Measured in the
+  // browser at ~270 requests/second, which froze the renderer and made the whole
+  // app look like it was permanently "loading".
+  const onChange = useRef(onConfigChange);
+  useEffect(() => { onChange.current = onConfigChange; }, [onConfigChange]);
 
+  const apply = useCallback((config: FleetViewConfig) => {
+    setRepos(config.repos);
+    onChange.current?.(config);
+  }, []);
+
+  // Load the persisted config once, on mount.
   useEffect(() => {
     let alive = true;
     (async () => {
