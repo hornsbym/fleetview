@@ -97,9 +97,12 @@ auto-remove → worktree labels are live-only. Agent-tool spawns skip `members[]
 teammates are discovered via `subagents/` + `meta.json`. The CLI deletes
 `teams/<id>/config.json` on lead exit → liveness comes from `claude agents --json`,
 not the team file. Subagent discovery is gated on `cwd` alone, **not** liveness:
-v1 also dropped stale non-worktree agents here, so any session whose agents had
-finished rendered "no teammates". The adapter now reports every agent and carries
-`stale` through for the UI to de-emphasize (servers report / UIs decide).
+v1 dropped stale non-worktree agents *in the adapter*, so any session whose agents
+had finished rendered "no teammates" and the data was gone for good. The adapter
+now reports every agent and carries `stale` through; the **teammates panel renders
+only the running ones**, since it answers "who is working right now". Filtering in
+the UI rather than the adapter keeps the history available for a future view
+(servers report / UIs decide).
 
 ---
 
