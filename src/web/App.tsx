@@ -142,8 +142,6 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
           <SessionView session={session} repo={repo} sessionId={sessionId} onDigest={setDigest} />
         </div>
         <div className="sp-agents">
-          <NowPanel digest={digest} live={!!session?.live} />
-          <DonePanel digest={digest} />
           <section className="card">
             <div className="col">
               <h3>Team — what each agent is doing</h3>
@@ -151,6 +149,15 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
                 ? <Teammates members={session.members} approvable={false} />
                 : <div className="none">No teammates in this session.</div>}
             </div>
+          </section>
+          <NowPanel
+            digest={digest}
+            live={!!session?.live}
+            status={session?.status}
+            waitingFor={session?.waitingFor}
+          />
+          <DonePanel digest={digest} />
+          <section className="card">
             <div className="col">
               <h3>Task board</h3>
               {session ? <TaskBoard tasks={session.tasks} /> : <div className="none">No task board for this session.</div>}

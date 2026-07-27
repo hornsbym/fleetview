@@ -72,3 +72,8 @@
   min-width: 0; border: 0; padding: 0 2px 0 0; color: var(--done); font-size: 12px;
 }
 .dg-none code { font-family: var(--mono); font-size: 10px; color: var(--dim); }
+
+/* Idle is a real state, not an absence of data — say so plainly, in the same
+   voice as the rest of the panel rather than as an error. */
+.dg-idle { margin: 0; font-size: 13px; line-height: 1.55; color: var(--dim); }
+.dg-blocked { color: var(--attention); }
