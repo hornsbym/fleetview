@@ -46,8 +46,16 @@ export interface Teammate {
   actionAt: string | null;
   /** Self-completing checklist (this owner's tasks). */
   plan: PlanItem[] | null;
-  /** True when its transcript hasn't advanced recently. */
+  /** True when its transcript hasn't advanced recently. Says "quiet", NOT "done" —
+   *  an agent can be idle or waiting on a prompt and still very much alive. */
   stale: boolean;
+  /**
+   * The agent has RETURNED (or been dismissed) and is no longer running.
+   * Determined from the spawning tool_use receiving a tool_result in the parent
+   * transcript — definitive, unlike inferring it from silence.
+   * `null` when it can't be determined (no toolUseId in meta.json).
+   */
+  finished: boolean | null;
   hasTranscript: boolean;
 }
 

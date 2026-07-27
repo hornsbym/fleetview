@@ -1,5 +1,5 @@
 import type { Teammate } from '../../../lib/claude-adapter/types';
-import { rosterOf } from '../shared/roster';
+import { rosterOf, type SessionState } from '../shared/roster';
 import { TeammateRow } from './TeammateRow';
 import './Teammates.css';
 
@@ -11,8 +11,8 @@ export interface TeammatesProps {
   onRequestChanges?: (m: Teammate) => void;
   /** False disables the approval buttons. Defaults to enabled. */
   approvable?: boolean;
-  /** Whether the session is running. A stopped session has no working agents. */
-  live?: boolean;
+  /** Session liveness + status. A stopped or idle session has no working agents. */
+  session?: SessionState;
 }
 
 /**
@@ -27,8 +27,8 @@ export interface TeammatesProps {
  *
  * Pure presentational: props in, no fetching — the caller wires callbacks.
  */
-export function Teammates({ members, onApprove, onRequestChanges, approvable = true, live = true }: TeammatesProps) {
-  const { active } = rosterOf(members ?? [], live);
+export function Teammates({ members, onApprove, onRequestChanges, approvable = true, session }: TeammatesProps) {
+  const { active } = rosterOf(members ?? [], session ?? {});
 
   if (active.length === 0) {
     return <p className="tm-empty">No agents working in this session.</p>;

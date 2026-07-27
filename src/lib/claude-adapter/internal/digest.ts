@@ -25,6 +25,8 @@ const DONE_MAX = 60;
 
 interface Cursor {
   offset: number;          // byte offset of the next unparsed line
+  /** tool_use ids that have received a tool_result — i.e. that call has returned. */
+  toolResults: Set<string>;
   trail: TrailItem[];      // newest last
   done: Milestone[];       // newest last
   compactions: number;
@@ -36,7 +38,7 @@ interface Cursor {
 const cursors = new Map<string, Cursor>();
 
 const fresh = (): Cursor => ({
-  offset: 0, trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastUser: null,
+  offset: 0, toolResults: new Set(), trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastUser: null,
 });
 
 /**
@@ -91,6 +93,11 @@ function ingest(c: Cursor, line: string) {
 
   if (o?.type === 'user') {
     const content = o?.message?.content;
+    if (Array.isArray(content)) {
+      for (const b of content) {
+        if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') c.toolResults.add(b.tool_use_id);
+      }
+    }
     const text = typeof content === 'string'
       ? content
       : Array.isArray(content)
@@ -188,23 +195,13 @@ function describeActivity(trail: TrailItem[]): string | null {
  * Never throws — an unreadable or unparseable transcript yields an empty digest,
  * matching the rest of the adapter's defensive posture.
  */
-export async function readDigest(
-  transcriptPath: string | null,
-  opts: { cwd?: string | null; sessionId?: string } = {},
-): Promise<SessionDigest> {
-  const report = await readReport(opts.cwd ?? null, opts.sessionId ?? '');
-  const empty: SessionDigest = {
-    now: report?.now ?? null,
-    reported: !!report,
-    reportedAt: report?.updatedAt ?? null,
-    doing: null, trail: [],
-    done: (report?.done ?? []).map(text => ({ kind: 'reported' as const, text, at: null })),
-    compactions: 0, edits: 0, tools: 0, lastRequest: null,
-  };
-  if (!transcriptPath) return empty;
-
+/**
+ * Advance the incremental cursor for a transcript and return it.
+ * Shared by the digest and by subagent-completion lookups so one pass serves both.
+ */
+async function scan(transcriptPath: string): Promise<Cursor | null> {
   let size = 0;
-  try { ({ size } = await stat(transcriptPath)); } catch { return empty; }
+  try { ({ size } = await stat(transcriptPath)); } catch { return null; }
 
   let c = cursors.get(transcriptPath);
   // A shrunk file means it was replaced (or forked over) — rescan from scratch.
@@ -230,6 +227,40 @@ export async function readDigest(
       } finally { await fh.close(); }
     }
   }
+  return c;
+}
+
+/**
+ * Which spawned agents have RETURNED, by the `toolUseId` in their meta.json.
+ *
+ * This is the definitive "is it still running" signal, and it replaces guessing
+ * from transcript staleness — a quiet agent may simply be idle or waiting, which
+ * is not the same as finished. A subagent's spawning `Agent`/`Task` tool_use gets
+ * a matching `tool_result` in the PARENT transcript the moment it returns (or is
+ * dismissed), so presence of that id means done and absence means still alive.
+ */
+export async function completedToolUses(transcriptPath: string | null): Promise<Set<string>> {
+  if (!transcriptPath) return new Set();
+  const c = await scan(transcriptPath);
+  return c ? c.toolResults : new Set();
+}
+
+export async function readDigest(
+  transcriptPath: string | null,
+  opts: { cwd?: string | null; sessionId?: string } = {},
+): Promise<SessionDigest> {
+  const report = await readReport(opts.cwd ?? null, opts.sessionId ?? '');
+  const empty: SessionDigest = {
+    now: report?.now ?? null,
+    reported: !!report,
+    reportedAt: report?.updatedAt ?? null,
+    doing: null, trail: [],
+    done: (report?.done ?? []).map(text => ({ kind: 'reported' as const, text, at: null })),
+    compactions: 0, edits: 0, tools: 0, lastRequest: null,
+  };
+  if (!transcriptPath) return empty;
+  const c = await scan(transcriptPath);
+  if (!c) return empty;
 
   const trail = [...c.trail].reverse();       // newest first
   const derived = [...c.done].reverse();      // newest first

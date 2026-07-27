@@ -146,7 +146,7 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
             <div className="col">
               <h3>Team — what each agent is doing</h3>
               {session && session.members.length > 0
-                ? <Teammates members={session.members} live={!!session.live} approvable={false} />
+                ? <Teammates members={session.members} session={{ live: session.live, status: session.status }} approvable={false} />
                 : <div className="none">No teammates in this session.</div>}
             </div>
           </section>

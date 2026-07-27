@@ -15,6 +15,7 @@ import { promisify } from 'node:util';
 import { HOME, TASKS, TEAMS, PROJECTS, encodeCwd } from './paths';
 import { readActivity, transcriptCwd } from './transcripts';
 import { liveSessions, knownSessions, canonicalSessionId } from './sessions';
+import { completedToolUses } from './digest';
 import type {
   Fleet, Project, Session, Task, Teammate, FleetConfig,
   AgentPlanFile, LiveSession, KnownSession,
@@ -102,7 +103,7 @@ function worktreeCache(): WorktreeCache {
 function newTeammate(partial: Partial<Teammate> & Pick<Teammate, 'agentId' | 'name' | 'agentType' | 'isLead'>): Teammate {
   return {
     cwd: null, worktree: null, task: null, action: null, actionAt: null,
-    plan: null, hasTranscript: false, stale: false, ...partial,
+    plan: null, hasTranscript: false, stale: false, finished: null, ...partial,
   };
 }
 
@@ -131,10 +132,13 @@ async function discoverSubagents(
   repoCwd: string,
   sessionId: string,
   worktrees: WorktreeCache,
+  parentTranscript: string | null,
 ): Promise<Teammate[]> {
   const dir = path.join(PROJECTS, encodeCwd(repoCwd), sessionId, 'subagents');
   let files: string[]; try { files = (await readdir(dir)).filter(f => /^agent-.*\.jsonl$/.test(f)); } catch { return []; }
   const wt = await worktrees(repoCwd);
+  // Which spawns have returned. Absence means still running — idle or busy.
+  const returned = await completedToolUses(parentTranscript);
   const out: Teammate[] = [];
   for (const f of files) {
     const id = f.replace(/^agent-/, '').replace(/\.jsonl$/, '');
@@ -153,6 +157,7 @@ async function discoverSubagents(
       action: a.action, actionAt: a.at, plan: a.plan,
       hasTranscript: true,
       stale: Date.now() - mtime > 45000,
+      finished: typeof meta.toolUseId === 'string' ? returned.has(meta.toolUseId) : null,
     });
     if (t.cwd) applyPlanFile(t, await readAgentPlan(t.cwd));
     out.push(t);
@@ -297,7 +302,7 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
     // Subagent discovery is gated on cwd alone — NOT on liveness. A session that
     // has stopped still has teammates worth showing.
     if (d.cwd) {
-      for (const sub of await discoverSubagents(d.cwd, d.id, worktrees)) {
+      for (const sub of await discoverSubagents(d.cwd, d.id, worktrees, await transcriptPath(d.id, d.cwd))) {
         // A self-reported plan file (sub.phase set) is authoritative; otherwise
         // fall back to the harness task list grouped by owner.
         if (!sub.phase) {
