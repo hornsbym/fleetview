@@ -16,7 +16,7 @@ import { HOME, TASKS, TEAMS, PROJECTS, encodeCwd } from './paths';
 import { readActivity, transcriptCwd } from './transcripts';
 import { liveSessions, knownSessions, canonicalSessionId } from './sessions';
 import type {
-  Fleet, Project, Session, Task, Teammate, FleetConfig, PendingSnapshot,
+  Fleet, Project, Session, Task, Teammate, FleetConfig,
   AgentPlanFile, LiveSession, KnownSession,
 } from '../types';
 
@@ -24,6 +24,17 @@ const pexec = promisify(execFile);
 
 async function readJson(p: string): Promise<any | null> {
   try { return JSON.parse(await readFile(p, 'utf8')); } catch { return null; }
+}
+
+// agent-<id>.meta.json is written once when the agent spawns and never changes.
+// Re-reading + parsing one per agent per poll (64 of them here) is pure waste.
+const metaCache = new Map<string, any>();
+async function readMeta(p: string): Promise<any> {
+  const hit = metaCache.get(p);
+  if (hit !== undefined) return hit;
+  const v = (await readJson(p)) || {};
+  metaCache.set(p, v);
+  return v;
 }
 async function listDirs(p: string): Promise<string[]> {
   try { return (await readdir(p, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => d.name); }
@@ -129,7 +140,7 @@ async function discoverSubagents(
     const id = f.replace(/^agent-/, '').replace(/\.jsonl$/, '');
     const full = path.join(dir, f);
     let mtime = 0; try { mtime = (await stat(full)).mtimeMs; } catch { continue; }
-    const meta = (await readJson(path.join(dir, `agent-${id}.meta.json`))) || {};
+    const meta = await readMeta(path.join(dir, `agent-${id}.meta.json`));
     const a = await readActivity(full);
     const t = newTeammate({
       agentId: id,
@@ -175,7 +186,7 @@ function draft(id: string): Draft {
   };
 }
 
-export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnapshot): Promise<Fleet> {
+export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
   // --- 1. Live sessions: the authoritative liveness signal, ownership-independent.
   const live = await liveSessions();
 
@@ -299,13 +310,14 @@ export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnap
       }
     }
 
-    const pendingApprovals = pending?.pendingBySession[d.id] ?? 0;
+    // Parked-permission counts are applied by readFleet, not baked in here, so a
+    // cached snapshot can still report an approval the instant it arrives.
     return {
       id: d.id,
       live: d.live,
       attached: d.live,
-      needsApproval: pendingApprovals > 0,
-      pendingApprovals,
+      needsApproval: false,
+      pendingApprovals: 0,
       cwd: d.cwd,
       leadSessionId: d.id,
       name: d.name,
