@@ -10,8 +10,10 @@ import type {
   HistoryResponse, PendingResponse, OkResponse, DigestResponse, SessionDigest,
 } from '../shared/events';
 import './SessionView.css';
+import './SessionEnvironment.css';
 import { linkify } from '../../../ui/FileLink';
 import { Markdown } from '../../../ui/Markdown';
+import { SessionEnvironmentPanel } from './SessionEnvironment';
 
 import { useVisiblePoll } from '../../../ui/useVisiblePoll';
 import type { Session } from '../../../lib/claude-adapter/types';
@@ -37,6 +39,17 @@ function toolSummary(input: unknown): string {
   const pick = i.description ?? i.command ?? i.file_path ?? i.path ?? i.pattern ?? i.prompt;
   if (typeof pick === 'string') return pick;
   try { const s = JSON.stringify(i); return s && s !== '{}' ? s : ''; } catch { return ''; }
+}
+
+function ago(at: string | undefined): string {
+  if (!at) return '';
+  const ms = Date.now() - new Date(at).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.round(m / 60)}h ago`;
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
@@ -190,6 +203,8 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
         </span>
       </div>
 
+      <SessionEnvironmentPanel session={session} sessionId={sessionId} />
+
       <div className="oc-transcript" ref={scrollRef} onScroll={onScroll}>
         {items.length === 0 ? (
           <div className="oc-hint">
@@ -237,16 +252,26 @@ function PermissionCard({ req, repo, onDecide }: {
   );
 }
 
+function Timestamp({ at }: { at?: string }) {
+  const label = ago(at);
+  if (!label) return null;
+  return <span className="oc-ts">{label}</span>;
+}
+
 function TranscriptItem({ item, repo }: { item: ChatItem; repo: string }) {
   switch (item.kind) {
     case 'user':
-      return <div className="oc-msg oc-user"><div className="oc-bubble">{linkify(item.text, repo)}</div></div>;
-    // Assistant text is Markdown (headings, lists, code fences, tables); user text
-    // is whatever you typed, so it stays literal.
+      return (
+        <div className="oc-msg oc-user">
+          <Timestamp at={item.at} />
+          <div className="oc-bubble">{linkify(item.text, repo)}</div>
+        </div>
+      );
     case 'assistant':
       return (
         <div className="oc-msg oc-assistant">
           <div className="oc-bubble"><Markdown text={item.text} repo={repo} /></div>
+          <Timestamp at={item.at} />
         </div>
       );
     case 'tool':

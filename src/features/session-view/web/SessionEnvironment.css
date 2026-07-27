@@ -1,0 +1,53 @@
+/* Session environment panel — collapsed by default, shares .dg base styling. */
+.dg-env { padding: 0; }
+
+.dg-env-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 12px 14px; border: 0; background: none; cursor: pointer;
+  color: inherit; font: inherit; text-align: left;
+}
+.dg-env-toggle:hover { background: var(--panel2); border-radius: var(--radius); }
+.dg-env-toggle:focus-visible { outline: 1px solid var(--lead); outline-offset: -1px; border-radius: var(--radius); }
+.dg-env-toggle h3 {
+  margin: 0; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--faint); font-weight: 600;
+}
+.dg-env-toggle .dg-chevron { font-size: 9px; transition: transform .15s ease; }
+.dg-env-toggle .dg-chevron::before { content: '\25B8'; }
+.dg-env-toggle[aria-expanded="true"] .dg-chevron { transform: rotate(90deg); }
+.dg-env-model {
+  margin-left: auto; font-size: 10px; color: var(--dim);
+  max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.dg-env-body {
+  padding: 0 14px 12px; display: flex; flex-direction: column; gap: 8px;
+}
+
+.dg-env-row {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.dg-env-label {
+  font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--faint); font-weight: 600;
+}
+.dg-env-value {
+  font-size: 12px; color: var(--ink); line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.dg-env-tags {
+  display: flex; flex-wrap: wrap; gap: 4px;
+}
+.dg-env-tag {
+  font-size: 10px; line-height: 16px; padding: 1px 6px;
+  border: 1px solid var(--border); border-radius: 4px;
+  color: var(--dim); background: var(--bg);
+}
+
+.dg-env-mcp-status {
+  margin-left: 4px; font-size: 9px; text-transform: uppercase;
+}
+.dg-env-mcp-connected { color: var(--done); }
+.dg-env-mcp-disconnected { color: var(--blocked); }
+.dg-env-mcp-unknown { color: var(--faint); }

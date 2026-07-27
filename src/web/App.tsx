@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Type-only import: erased at build, so no Node code leaks into the browser bundle.
 import type { Fleet, Project, Session, SessionDigest } from '../lib/claude-adapter/types';
-import { ProjectSwitcher, AddProject } from '../features/projects/web';
+import { ProjectSwitcher } from '../features/projects/web';
 import { projectSlugs } from '../features/projects/shared/slug';
 import { Teammates } from '../features/teammates/web';
 import { TaskBoard } from '../features/task-board/web';
@@ -13,12 +13,10 @@ import { usePath, parseRoute, navigate, projectPath, sessionPath } from './route
 export function App() {
   const [fleet, setFleet] = useState<Fleet | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [completed, setCompleted] = useState<Set<string>>(new Set());
+  const prevStatus = useRef<Map<string, string | null> | null>(null);
   const path = usePath();
   const route = parseRoute(path);
-
-  // Stable identity: an inline arrow here is what fed the AddProject render loop.
-  const bumpRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   const pollFleet = useCallback(() => {
     void (async () => {
@@ -28,7 +26,51 @@ export function App() {
       } catch (e: any) { setErr(String(e?.message || e)); }
     })();
   }, []);
-  useVisiblePoll(pollFleet, 2500, refreshKey);
+  useVisiblePoll(pollFleet, 2500);
+
+  useEffect(() => {
+    if (!fleet) return;
+    const allSessions = fleet.projects.flatMap((p) => p.sessions);
+    const currentStatus = new Map(allSessions.map((s) => [s.id, s.live ? (s.status || 'live') : 'dead']));
+
+    if (prevStatus.current !== null) {
+      const notify: string[] = [];
+      for (const [id, prev] of prevStatus.current) {
+        const curr = currentStatus.get(id);
+        // Session died (was live, now gone or dead)
+        if (prev !== 'dead' && (curr === 'dead' || !curr)) notify.push(id);
+        // Session went idle after being busy (finished a turn)
+        if (prev === 'busy' && curr === 'idle') notify.push(id);
+      }
+      if (notify.length > 0) {
+        setCompleted((prev) => {
+          const next = new Set(prev);
+          for (const id of notify) {
+            if (id !== route.sessionId) next.add(id);
+          }
+          return next;
+        });
+      }
+    }
+
+    prevStatus.current = currentStatus;
+  }, [fleet, route.sessionId]);
+
+  useEffect(() => {
+    if (completed.size > 0) {
+      document.title = `✓ ${completed.size} done — FleetView`;
+    } else {
+      document.title = 'FleetView';
+    }
+  }, [completed]);
+
+  const clearCompleted = useCallback((id: string) => {
+    setCompleted((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
 
   // Hooks must run before any early return; derive slug maps from the current fleet.
   const slugMaps = useMemo(() => projectSlugs((fleet?.projects ?? []).map((p) => p.path)), [fleet]);
@@ -44,6 +86,10 @@ export function App() {
     ? project.sessions.find((s) => s.id === route.sessionId) ?? null
     : null;
 
+  if (route.sessionId && completed.has(route.sessionId)) {
+    clearCompleted(route.sessionId);
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -55,8 +101,7 @@ export function App() {
       <div className="layout">
         <aside className="sidebar">
           <div className="label">Projects</div>
-          <ProjectSwitcher projects={fleet.projects} selected={selectedRepo} onSelect={(p) => navigate(projectPath(toSlug.get(p) ?? ''))} />
-          <AddProject onConfigChange={bumpRefresh} />
+          <ProjectSwitcher projects={fleet.projects} selected={selectedRepo} onSelect={(p) => navigate(projectPath(toSlug.get(p) ?? ''))} completed={completed} />
         </aside>
         <main className="main">
           {!project ? (
@@ -64,7 +109,7 @@ export function App() {
           ) : route.sessionId ? (
             <SessionPage repo={project.path} slug={slug} sessionId={route.sessionId} session={session} />
           ) : (
-            <ProjectView project={project} slug={slug} />
+            <ProjectView project={project} slug={slug} completed={completed} clearCompleted={clearCompleted} />
           )}
         </main>
       </div>
@@ -72,7 +117,7 @@ export function App() {
   );
 }
 
-function ProjectView({ project, slug }: { project: Project; slug: string }) {
+function ProjectView({ project, slug, completed, clearCompleted }: { project: Project; slug: string; completed: Set<string>; clearCompleted: (id: string) => void }) {
   return (
     <>
       <HookSetup />
@@ -89,20 +134,19 @@ function ProjectView({ project, slug }: { project: Project; slug: string }) {
         </div>
       ) : (
         <div className="tiles">
-          {project.sessions.map((s) => <SessionTile key={s.id} slug={slug} s={s} />)}
+          {project.sessions.map((s) => <SessionTile key={s.id} slug={slug} s={s} completed={completed.has(s.id)} clearCompleted={clearCompleted} />)}
         </div>
       )}
     </>
   );
 }
 
-function SessionTile({ slug, s }: { slug: string; s: Session }) {
+function SessionTile({ slug, s, completed, clearCompleted }: { slug: string; s: Session; completed: boolean; clearCompleted: (id: string) => void }) {
   const teammates = s.members.filter((m) => !m.isLead).length;
+  const cls = 'tile' + (s.needsApproval ? ' flagged' : '') + (completed ? ' completed' : '');
   return (
-    <button type="button" className={'tile' + (s.needsApproval ? ' flagged' : '')} onClick={() => navigate(sessionPath(slug, s.id))}>
+    <button type="button" className={cls} onClick={() => { if (completed) clearCompleted(s.id); navigate(sessionPath(slug, s.id)); }}>
       <div className="tile-head">
-        {/* Don't invent a status. Some sessions (notably SDK-spawned ones) never
-            report one — claiming "active" there is worse than saying "live". */}
         {s.live ? <span className="live"><span className="dot" />{s.status || 'live'}</span> : <span className="idle">◦ inactive</span>}
         {s.kind === 'background' && <span className="tile-own">bg</span>}
         {s.needsApproval && (
@@ -126,9 +170,6 @@ function SessionTile({ slug, s }: { slug: string; s: Session }) {
 }
 
 function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: string; sessionId: string; session: Session | null }) {
-  // The digest is fetched once by SessionView (which renders "Working on now"
-  // above the transcript) and lifted here so "Done so far" can sit in the side
-  // column without a second request.
   const [digest, setDigest] = useState<SessionDigest | null>(null);
   return (
     <div className="sp">
@@ -157,12 +198,14 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
             waitingFor={session?.waitingFor}
           />
           <DonePanel digest={digest} sessionId={sessionId} />
-          <section className="card">
-            <div className="col">
-              <h3>Task board</h3>
-              {session ? <TaskBoard tasks={session.tasks} /> : <div className="none">No task board for this session.</div>}
-            </div>
-          </section>
+          {session && session.tasks.length > 0 && (
+            <section className="card">
+              <div className="col">
+                <h3>Task board</h3>
+                <TaskBoard tasks={session.tasks} />
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>

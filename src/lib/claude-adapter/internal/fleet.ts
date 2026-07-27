@@ -156,7 +156,7 @@ async function discoverSubagents(
       worktree: wt[id] || null,
       action: a.action, actionAt: a.at, plan: a.plan,
       hasTranscript: true,
-      stale: Date.now() - mtime > 45000,
+      stale: Date.now() - mtime > 15000,
       finished: typeof meta.toolUseId === 'string' ? returned.has(meta.toolUseId) : null,
     });
     if (t.cwd) applyPlanFile(t, await readAgentPlan(t.cwd));
