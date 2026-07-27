@@ -6,6 +6,7 @@
 //
 // Both prefer the agent's own account (`.fleetview/sessions/<id>.json`) and fall
 // back to what can be derived from the transcript.
+import { useEffect, useRef } from 'react';
 import type { Milestone, SessionDigest } from '../shared/events';
 import './SessionDigest.css';
 
@@ -60,9 +61,34 @@ export function NowPanel({ digest, live }: { digest: SessionDigest | null; live:
 }
 
 export function DonePanel({ digest }: { digest: SessionDigest | null }) {
-  // Ordering is already right from the adapter: a self-reported list keeps the
-  // agent's own order (a narrative), derived milestones come newest-first (a log).
+  // Ordering differs by source: a self-reported list keeps the agent's own
+  // chronological order (a narrative, newest LAST), derived milestones come
+  // newest-first (a log, newest FIRST).
   const items = digest?.done ?? [];
+  const chronological = !!digest?.reported;
+
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const stickRef = useRef(true);
+
+  // Keep the newest entry visible. For a chronological list that means pinning to
+  // the bottom; a newest-first list already shows it at the top.
+  //
+  // Keyed on the CONTENT, not the array identity — the digest object is replaced
+  // on every 2.5s poll, so depending on identity would re-scroll constantly and
+  // fight anyone reading back through the list (the same auto-scroll hijack this
+  // codebase already fixed once in the transcript).
+  const contentKey = `${items.length}:${items[items.length - 1]?.text ?? ''}`;
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el || !chronological) return;
+    if (stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [contentKey, chronological]);
+
+  const onScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
 
   return (
     <section className="dg dg-done" aria-label="What this session has completed">
@@ -78,7 +104,7 @@ export function DonePanel({ digest }: { digest: SessionDigest | null }) {
           list their progress here; otherwise commits and finished tasks appear.
         </p>
       ) : (
-        <ul className="dg-list">
+        <ul className="dg-list" ref={listRef} onScroll={onScroll}>
           {items.map((m, i) => (
             <li key={i} className={`dg-item dg-${m.kind}`}>
               <span className="dg-kind">{KIND_LABEL[m.kind] ?? m.kind}</span>

@@ -45,7 +45,14 @@
 }
 
 /* Milestones */
-.dg-list { list-style: none; margin: 0; padding: 0; }
+/* Bounded so a long session can't push Team/Task board off the side column.
+   clamp() keeps it usable on short screens without dominating tall ones. */
+.dg-list {
+  list-style: none; margin: 0; padding: 0;
+  max-height: clamp(160px, 34vh, 340px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .dg-item { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 12px; }
 .dg-item + .dg-item { border-top: 1px solid var(--border); }
 .dg-kind {
