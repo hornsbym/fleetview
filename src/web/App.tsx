@@ -156,7 +156,7 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
             status={session?.status}
             waitingFor={session?.waitingFor}
           />
-          <DonePanel digest={digest} />
+          <DonePanel digest={digest} sessionId={sessionId} />
           <section className="card">
             <div className="col">
               <h3>Task board</h3>

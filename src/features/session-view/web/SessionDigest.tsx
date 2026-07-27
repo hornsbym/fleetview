@@ -2,13 +2,16 @@
 // after being away, without reading the transcript.
 //
 //   • NowPanel  — 1-3 sentences on the conceptual work in flight. Never a command.
-//   • DonePanel — the running list of what this session has accomplished.
+//   • DonePanel — the numbered running list of what this session has accomplished.
 //
 // Both prefer the agent's own account (`.fleetview/sessions/<id>.json`) and fall
 // back to what can be derived from the transcript.
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Milestone, SessionDigest } from '../shared/events';
 import './SessionDigest.css';
+
+/** How many of the most recent entries stay visible while collapsed. */
+const COLLAPSED_COUNT = 5;
 
 function ago(at: string | null): string {
   if (!at) return '';
@@ -22,7 +25,7 @@ function ago(at: string | null): string {
 }
 
 const KIND_LABEL: Record<Milestone['kind'], string> = {
-  reported: '•',
+  reported: '',
   commit: 'commit',
   task: 'task',
   plan: 'plan',
@@ -79,35 +82,33 @@ export function NowPanel({ digest, live, status, waitingFor }: {
   );
 }
 
-export function DonePanel({ digest }: { digest: SessionDigest | null }) {
-  // Ordering differs by source: a self-reported list keeps the agent's own
-  // chronological order (a narrative, newest LAST), derived milestones come
-  // newest-first (a log, newest FIRST).
-  const items = digest?.done ?? [];
-  const chronological = !!digest?.reported;
+export function DonePanel({ digest, sessionId }: { digest: SessionDigest | null; sessionId?: string }) {
+  // The two sources arrive in opposite orders — a self-reported list is the
+  // agent's own chronological narrative, derived milestones come newest-first.
+  // Normalize to chronological so numbering ascends with time: a higher number is
+  // always a more recent item, and the newest sits at the bottom.
+  const items = useMemo(() => {
+    const list = digest?.done ?? [];
+    return digest?.reported ? list : [...list].reverse();
+  }, [digest]);
 
-  const listRef = useRef<HTMLUListElement | null>(null);
-  const stickRef = useRef(true);
+  const [expanded, setExpanded] = useState(false);
+  const bodyId = useId();
 
-  // Keep the newest entry visible. For a chronological list that means pinning to
-  // the bottom; a newest-first list already shows it at the top.
-  //
-  // Keyed on the CONTENT, not the array identity — the digest object is replaced
-  // on every 2.5s poll, so depending on identity would re-scroll constantly and
-  // fight anyone reading back through the list (the same auto-scroll hijack this
-  // codebase already fixed once in the transcript).
-  const contentKey = `${items.length}:${items[items.length - 1]?.text ?? ''}`;
+  // Reset only when the session changes, so the 2.5s poll can't collapse what the
+  // user just opened (the same identity-latch discipline the task board uses).
+  const latched = useRef(sessionId);
   useEffect(() => {
-    const el = listRef.current;
-    if (!el || !chronological) return;
-    if (stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [contentKey, chronological]);
+    if (latched.current === sessionId) return;
+    latched.current = sessionId;
+    setExpanded(false);
+  }, [sessionId]);
 
-  const onScroll = () => {
-    const el = listRef.current;
-    if (!el) return;
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-  };
+  const hidden = Math.max(0, items.length - COLLAPSED_COUNT);
+  const shown = expanded ? items : items.slice(-COLLAPSED_COUNT);
+  // Numbering is against the FULL list, so a collapsed view still tells you where
+  // you are — "8, 9, 10, 11, 12" rather than restarting at 1.
+  const firstNumber = expanded ? 1 : items.length - shown.length + 1;
 
   return (
     <section className="dg dg-done" aria-label="What this session has completed">
@@ -123,15 +124,32 @@ export function DonePanel({ digest }: { digest: SessionDigest | null }) {
           list their progress here; otherwise commits and finished tasks appear.
         </p>
       ) : (
-        <ul className="dg-list" ref={listRef} onScroll={onScroll}>
-          {items.map((m, i) => (
-            <li key={i} className={`dg-item dg-${m.kind}`}>
-              <span className="dg-kind">{KIND_LABEL[m.kind] ?? m.kind}</span>
-              <span className="dg-text">{m.text}</span>
-              {m.at && <span className="dg-when">{ago(m.at)}</span>}
-            </li>
-          ))}
-        </ul>
+        <>
+          <ol className="dg-list" id={bodyId} start={firstNumber}>
+            {shown.map((m, i) => (
+              <li key={firstNumber + i} className={`dg-item dg-${m.kind}`}>
+                <span className="dg-text">
+                  {m.text}
+                  {KIND_LABEL[m.kind] && <span className="dg-kind">{KIND_LABEL[m.kind]}</span>}
+                </span>
+                {m.at && <span className="dg-when">{ago(m.at)}</span>}
+              </li>
+            ))}
+          </ol>
+
+          {hidden > 0 && (
+            <button
+              type="button"
+              className="dg-toggle"
+              aria-expanded={expanded}
+              aria-controls={bodyId}
+              onClick={() => setExpanded(e => !e)}
+            >
+              <span className="dg-chevron" aria-hidden="true" />
+              {expanded ? 'Show recent only' : `Show all ${items.length}`}
+            </button>
+          )}
+        </>
       )}
     </section>
   );

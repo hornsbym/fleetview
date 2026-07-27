@@ -45,35 +45,49 @@
 }
 
 /* Milestones */
-/* Bounded so a long session can't push Team/Task board off the side column.
-   clamp() keeps it usable on short screens without dominating tall ones. */
+/* Numbered, not scrollable: the component collapses instead, so a long session
+   can't push Team/Task board off the column. Numbers count with time, so a higher
+   number is always more recent and the newest entry sits last. */
 .dg-list {
-  list-style: none; margin: 0; padding: 0;
-  max-height: clamp(160px, 34vh, 340px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  margin: 0; padding: 0 0 0 26px;
+  list-style: decimal;
 }
-.dg-item { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 12px; }
+.dg-list::marker { color: var(--faint); }
+.dg-list li::marker { color: var(--faint); font-size: 11px; font-family: var(--mono); }
+.dg-item { padding: 5px 0; font-size: 12px; }
+.dg-item::marker { font-variant-numeric: tabular-nums; }
 .dg-item + .dg-item { border-top: 1px solid var(--border); }
+/* Kind is now a trailing tag on the text, not a leading column — the number
+   occupies that slot. Self-reported items carry no tag at all. */
 .dg-kind {
-  font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  margin-left: 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
   border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
-  color: var(--faint); flex-shrink: 0; min-width: 52px; text-align: center;
+  color: var(--faint); white-space: nowrap;
 }
 .dg-commit .dg-kind { color: var(--done); border-color: var(--done); }
 .dg-task .dg-kind { color: var(--lead); border-color: var(--lead); }
 .dg-plan .dg-kind { color: var(--attention); border-color: var(--attention); }
 .dg-text { color: var(--ink); line-height: 1.45; }
+.dg-when { display: block; margin-top: 2px; color: var(--faint); font-size: 10px; }
 /* A compaction is context, not an accomplishment — de-emphasize it. */
 .dg-compaction .dg-text { color: var(--faint); font-style: italic; }
 
-/* Self-reported bullets are prose, so the marker is just a dot. */
-.dg-reported .dg-kind {
-  min-width: 0; border: 0; padding: 0 2px 0 0; color: var(--done); font-size: 12px;
-}
 .dg-none code { font-family: var(--mono); font-size: 10px; color: var(--dim); }
 
 /* Idle is a real state, not an absence of data — say so plainly, in the same
    voice as the rest of the panel rather than as an error. */
 .dg-idle { margin: 0; font-size: 13px; line-height: 1.55; color: var(--dim); }
 .dg-blocked { color: var(--attention); }
+
+/* Expand/collapse for the whole list. */
+.dg-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  margin-top: 8px; padding: 6px 0 0; border: 0; border-top: 1px solid var(--border);
+  background: none; color: var(--faint); font: inherit; font-size: 11px;
+  cursor: pointer; text-align: left;
+}
+.dg-toggle:hover { color: var(--dim); }
+.dg-toggle:focus-visible { outline: 1px solid var(--lead); outline-offset: 2px; }
+.dg-chevron { display: inline-block; font-size: 9px; transition: transform .15s ease; }
+.dg-chevron::before { content: '\25B8'; }
+.dg-toggle[aria-expanded="true"] .dg-chevron { transform: rotate(90deg); }
