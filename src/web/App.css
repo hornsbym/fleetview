@@ -35,6 +35,7 @@
 .tile { text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--ink); cursor: pointer; font: inherit; }
 .tile:hover { background: var(--panel2); border-color: var(--lead); }
 .tile.flagged { border-color: var(--attention); box-shadow: 0 0 0 1px var(--attention) inset; }
+.tile.completed { border-color: var(--done); box-shadow: 0 0 0 1px var(--done) inset; }
 .tile-head { display: flex; align-items: center; gap: 8px; }
 .tile-own { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--lead); border: 1px solid var(--border); border-color: #1f3a5f; border-radius: 4px; padding: 1px 6px; }
 .tile-approve { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--attention); border: 1px solid var(--attention); border-radius: 4px; padding: 1px 6px; }

@@ -31,26 +31,16 @@ export interface SessionState {
 export function isFinished(m: Teammate, session: SessionState = {}): boolean {
   if (m.isLead) return false;
 
-  // A session that isn't running has no running agents, whatever they last said
-  // about themselves. `.fleetview/plan.json` is a file, not a heartbeat: an agent
-  // that wrote `phase: "working"` and then died leaves that claim on disk forever.
   if (session.live === false) return true;
 
-  // An IDLE parent is awaiting your input, and subagents only run inside a turn —
-  // so nothing of its can still be running. This catches agents that were
-  // interrupted rather than completed: those never receive a tool_result, so the
-  // signal below would call them alive indefinitely. Note 'waiting' is expressly
-  // NOT idle — a subagent may be the thing blocked on a permission prompt.
-  if (session.status === 'idle') return true;
+  // An agent can be resumed after returning its tool_result. If its transcript
+  // is still being written to (!stale), it's actively working regardless of
+  // whether the original tool_result was received.
+  if (m.finished === true && !m.stale) return false;
 
-  // Definitive: the spawning tool call received its result, so the agent returned
-  // or was dismissed. An agent that has NOT returned is still alive — it may be
-  // idle or waiting on a prompt, and those must stay visible.
   if (m.finished !== null) return m.finished;
 
-  // Only when completion is unknowable (no toolUseId in meta.json) do we fall back
-  // to silence as a proxy — which is a guess, and says so.
-  return m.stale;
+  return false;
 }
 
 /** Split a member list into what's running and what's done. Lead(s) pinned first;

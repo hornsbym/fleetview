@@ -27,6 +27,8 @@ interface Cursor {
   offset: number;          // byte offset of the next unparsed line
   /** tool_use ids that have received a tool_result — i.e. that call has returned. */
   toolResults: Set<string>;
+  /** Agent tool_use ids pending completion, mapped to their description. */
+  pendingAgents: Map<string, string>;
   trail: TrailItem[];      // newest last
   done: Milestone[];       // newest last
   compactions: number;
@@ -38,7 +40,7 @@ interface Cursor {
 const cursors = new Map<string, Cursor>();
 
 const fresh = (): Cursor => ({
-  offset: 0, toolResults: new Set(), trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastUser: null,
+  offset: 0, toolResults: new Set(), pendingAgents: new Map(), trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastUser: null,
 });
 
 /**
@@ -95,7 +97,14 @@ function ingest(c: Cursor, line: string) {
     const content = o?.message?.content;
     if (Array.isArray(content)) {
       for (const b of content) {
-        if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') c.toolResults.add(b.tool_use_id);
+        if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+          c.toolResults.add(b.tool_use_id);
+          const desc = c.pendingAgents.get(b.tool_use_id);
+          if (desc) {
+            c.pendingAgents.delete(b.tool_use_id);
+            pushDone(c, { kind: 'subagent', text: desc, at: o.timestamp ?? null });
+          }
+        }
       }
     }
     const text = typeof content === 'string'
@@ -120,6 +129,11 @@ function ingest(c: Cursor, line: string) {
     if (c.trail.length > TRAIL_MAX) c.trail.shift();
 
     if (b.name === 'Write' || b.name === 'Edit' || b.name === 'NotebookEdit') c.edits++;
+
+    if (b.name === 'Agent' && b.id) {
+      const desc = b.input?.description || b.input?.prompt?.slice(0, 80) || 'subagent';
+      c.pendingAgents.set(b.id, desc);
+    }
 
     if (b.name === 'Bash') {
       const subject = commitSubject(String(b.input?.command ?? ''));

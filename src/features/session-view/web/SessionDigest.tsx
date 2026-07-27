@@ -30,6 +30,7 @@ const KIND_LABEL: Record<Milestone['kind'], string> = {
   task: 'task',
   plan: 'plan',
   compaction: 'compact',
+  subagent: 'agent',
 };
 
 export function NowPanel({ digest, live, status, waitingFor }: {
@@ -83,13 +84,9 @@ export function NowPanel({ digest, live, status, waitingFor }: {
 }
 
 export function DonePanel({ digest, sessionId }: { digest: SessionDigest | null; sessionId?: string }) {
-  // The two sources arrive in opposite orders — a self-reported list is the
-  // agent's own chronological narrative, derived milestones come newest-first.
-  // Normalize to chronological so numbering ascends with time: a higher number is
-  // always a more recent item, and the newest sits at the bottom.
   const items = useMemo(() => {
     const list = digest?.done ?? [];
-    return digest?.reported ? list : [...list].reverse();
+    return digest?.reported ? [...list].reverse() : list;
   }, [digest]);
 
   const [expanded, setExpanded] = useState(false);
@@ -105,10 +102,8 @@ export function DonePanel({ digest, sessionId }: { digest: SessionDigest | null;
   }, [sessionId]);
 
   const hidden = Math.max(0, items.length - COLLAPSED_COUNT);
-  const shown = expanded ? items : items.slice(-COLLAPSED_COUNT);
-  // Numbering is against the FULL list, so a collapsed view still tells you where
-  // you are — "8, 9, 10, 11, 12" rather than restarting at 1.
-  const firstNumber = expanded ? 1 : items.length - shown.length + 1;
+  const shown = expanded ? items : items.slice(0, COLLAPSED_COUNT);
+  const firstNumber = 1;
 
   return (
     <section className="dg dg-done" aria-label="What this session has completed">

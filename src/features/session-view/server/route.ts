@@ -7,7 +7,7 @@
 // There is deliberately no start / stop / message route. The terminal session is
 // the source of truth; FleetView reads it.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readSessionHistory, readSubagentHistory, readSessionDigest, type PermissionDecision } from '../../../lib/claude-adapter/index';
+import { readSessionHistory, readSubagentHistory, readSessionDigest, readSessionEnvironment, type PermissionDecision } from '../../../lib/claude-adapter/index';
 import { bufferSince, subscribe, pendingPermissions, resolvePermission } from '../../../server/bus';
 
 const HEARTBEAT_MS = 15_000;
@@ -87,6 +87,15 @@ export async function handleSessionRoute(req: IncomingMessage, res: ServerRespon
       if (!sessionId) { json(res, { ok: false, reason: 'missing-sessionId' }); return true; }
       const cwd = url.searchParams.get('cwd');
       json(res, { ok: true, digest: await readSessionDigest(sessionId, cwd) });
+      return true;
+    }
+
+    // Session environment: static metadata from the init system message.
+    if (req.method === 'GET' && url.pathname === '/api/session/environment') {
+      if (!sessionId) { json(res, { ok: false, reason: 'missing-sessionId' }); return true; }
+      const cwd = url.searchParams.get('cwd');
+      const environment = await readSessionEnvironment(sessionId, cwd);
+      json(res, { ok: true, environment });
       return true;
     }
 
