@@ -182,7 +182,11 @@ export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnap
   for (const k of known) {
     const d = get(k.sessionId);
     d.cwd ||= k.cwd;
-    d.name ||= k.summary || null;
+    // The transcript summary WINS over the CLI's name. `claude agents --json`
+    // usually reports a derived slug (`fleetview-81` — folder name + hash), which
+    // tells you nothing; listSessions gives the real title / first prompt
+    // ("Review the roadmap"). Fall back to the CLI name when there's no summary.
+    if (k.summary) d.name = k.summary;
     d.gitBranch ||= k.gitBranch;
     if (k.lastModified && (!d.lastActiveAt || k.lastModified > d.lastActiveAt)) d.lastActiveAt = k.lastModified;
   }

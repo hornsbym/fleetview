@@ -77,6 +77,11 @@ export async function liveSessions(cwd?: string): Promise<LiveSession[]> {
 /**
  * Every session on disk for a repo (live or past), newest first.
  * Never throws — returns `[]` when the project has no history.
+ *
+ * Note this EXCLUDES programmatic/SDK-entrypoint sessions by default, so it is not
+ * a superset of `liveSessions()`: an SDK-spawned session appears in
+ * `claude agents --json` but not here, and therefore has no `summary` to name it.
+ * That's why both sources are merged rather than either being preferred outright.
  */
 export async function knownSessions(dir: string, limit = 50): Promise<KnownSession[]> {
   try {

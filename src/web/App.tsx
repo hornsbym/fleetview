@@ -100,7 +100,9 @@ function SessionTile({ slug, s }: { slug: string; s: Session }) {
   return (
     <button type="button" className={'tile' + (s.needsApproval ? ' flagged' : '')} onClick={() => navigate(sessionPath(slug, s.id))}>
       <div className="tile-head">
-        {s.live ? <span className="live"><span className="dot" />{s.status || 'active'}</span> : <span className="idle">◦ inactive</span>}
+        {/* Don't invent a status. Some sessions (notably SDK-spawned ones) never
+            report one — claiming "active" there is worse than saying "live". */}
+        {s.live ? <span className="live"><span className="dot" />{s.status || 'live'}</span> : <span className="idle">◦ inactive</span>}
         {s.kind === 'background' && <span className="tile-own">bg</span>}
         {s.needsApproval && (
           <span className="tile-approve">
