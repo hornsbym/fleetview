@@ -1,7 +1,11 @@
 // "Does this project need a human?" — derived from the fleet snapshot the switcher
 // already receives. Pure and dependency-free (type-only imports) so any surface —
 // switcher today, a topbar summary later — can reuse the exact same reading.
-import type { Project } from '../../../lib/claude-adapter/types';
+import type { Project, Teammate } from '../../../lib/claude-adapter/types';
+
+/** Positive evidence an agent was still meant to be working when it went quiet. */
+const isWorking = (m: Teammate): boolean =>
+  m.phase === 'working' || m.phase === 'planning' || !!m.task;
 
 export interface ProjectAttention {
   /** Agents parked on a plan only a human can approve — the signal that means "you". */
@@ -40,7 +44,15 @@ export function projectAttention(project: Project): ProjectAttention {
       // Reached only when not already counted above: an agent parked for approval
       // goes stale by design, and double-badging it would make the strong signal
       // look like noise. A lead or transcript-less member can't be judged at all.
-      else if (!m.isLead && m.hasTranscript && m.stale && m.phase !== 'done') stalled++;
+      //
+      // "Stale" alone is NOT enough to call something stalled. The adapter now
+      // reports every agent a session ever spawned, and a one-off helper that
+      // finished hours ago is quiet because it's done, not stuck — counting those
+      // read as "11 STALLED" on a perfectly healthy project. Require positive
+      // evidence the agent was still meant to be working: a self-reported working
+      // phase, or ownership of an in-progress task. Absent either, we don't know,
+      // and guessing wrong in the alarming direction is the worse error.
+      else if (!m.isLead && m.hasTranscript && m.stale && isWorking(m)) stalled++;
     }
   }
 

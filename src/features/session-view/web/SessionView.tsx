@@ -11,6 +11,7 @@ import type {
 } from '../shared/events';
 import './SessionView.css';
 import { linkify } from '../../../ui/FileLink';
+import { useVisiblePoll } from '../../../ui/useVisiblePoll';
 import type { Session } from '../../../lib/claude-adapter/types';
 
 export interface SessionViewProps {
@@ -75,21 +76,21 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
     return () => { alive = false; };
   }, [sessionId]);
 
-  // Tail only while live. Separate effect so starting/stopping the poll never
-  // resets what's already on screen.
-  useEffect(() => {
+  // Tail while live. Separate effect so starting/stopping the poll never resets
+  // what's already on screen. Visibility-aware: a backgrounded tab is throttled to
+  // near-zero ticks, so this also refreshes the moment you come back.
+  const tail = useCallback(() => {
     if (!sessionId || !live) return;
-    let alive = true;
-    const id = setInterval(async () => {
+    void (async () => {
       try {
         const h: HistoryResponse = await (
           await fetch(`/api/session/history?sessionId=${encodeURIComponent(sessionId)}`)
         ).json();
-        if (alive && h.ok && h.items) setItems(h.items);
+        if (h.ok && h.items) setItems(h.items);
       } catch { /* keep last known */ }
-    }, TAIL_MS);
-    return () => { alive = false; clearInterval(id); };
+    })();
   }, [sessionId, live]);
+  useVisiblePoll(tail, TAIL_MS, `${sessionId}:${live}`);
 
   // Parked permissions: pushed over SSE, reconciled by poll.
   useEffect(() => {
@@ -99,6 +100,7 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
 
     let alive = true;
     const poll = async () => {
+      if (document.hidden) return;
       try {
         const d: PendingResponse = await (
           await fetch(`/api/session/pending?sessionId=${encodeURIComponent(sessionId)}`)
@@ -108,6 +110,8 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
     };
     void poll();
     const id = setInterval(poll, TAIL_MS);
+    const onVisible = () => { if (!document.hidden) void poll(); };
+    document.addEventListener('visibilitychange', onVisible);
 
     const es = new EventSource(`/api/session/stream?sessionId=${encodeURIComponent(sessionId)}`);
     es.onmessage = (ev) => {
@@ -124,7 +128,10 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
     };
     es.onerror = () => { /* EventSource reconnects via Last-Event-ID */ };
 
-    return () => { alive = false; clearInterval(id); es.close(); };
+    return () => {
+      alive = false; clearInterval(id); es.close();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [sessionId]);
 
   // Stick to bottom only when the user is already there, so scrolling up to read

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 // Type-only import: erased at build, so no Node code leaks into the browser bundle.
 import type { Fleet, Project, Session } from '../lib/claude-adapter/types';
 import { ProjectSwitcher, AddProject } from '../features/projects/web';
@@ -7,6 +7,7 @@ import { Teammates } from '../features/teammates/web';
 import { TaskBoard } from '../features/task-board/web';
 import { SessionView } from '../features/session-view/web';
 import { HookSetup } from '../features/hooks/web';
+import { useVisiblePoll } from '../ui/useVisiblePoll';
 import { usePath, parseRoute, navigate, projectPath, sessionPath } from './router';
 
 export function App() {
@@ -16,18 +17,18 @@ export function App() {
   const path = usePath();
   const route = parseRoute(path);
 
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
+  // Stable identity: an inline arrow here is what fed the AddProject render loop.
+  const bumpRefresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  const pollFleet = useCallback(() => {
+    void (async () => {
       try {
         const d: Fleet = await (await fetch('/api/fleet')).json();
-        if (alive) { setFleet(d); setErr(null); }
-      } catch (e: any) { if (alive) setErr(String(e?.message || e)); }
-    };
-    poll();
-    const id = setInterval(poll, 2500);
-    return () => { alive = false; clearInterval(id); };
-  }, [refreshKey]);
+        setFleet(d); setErr(null);
+      } catch (e: any) { setErr(String(e?.message || e)); }
+    })();
+  }, []);
+  useVisiblePoll(pollFleet, 2500, refreshKey);
 
   // Hooks must run before any early return; derive slug maps from the current fleet.
   const slugMaps = useMemo(() => projectSlugs((fleet?.projects ?? []).map((p) => p.path)), [fleet]);
@@ -55,7 +56,7 @@ export function App() {
         <aside className="sidebar">
           <div className="label">Projects</div>
           <ProjectSwitcher projects={fleet.projects} selected={selectedRepo} onSelect={(p) => navigate(projectPath(toSlug.get(p) ?? ''))} />
-          <AddProject onConfigChange={() => setRefreshKey((k) => k + 1)} />
+          <AddProject onConfigChange={bumpRefresh} />
         </aside>
         <main className="main">
           {!project ? (
