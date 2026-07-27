@@ -13,7 +13,9 @@ Fixed in v2 and removed from this file: the orchestrator's row vanishing once a
 tasks/teams dir appeared; the `'live'` sentinel never resolving to a `Session`;
 "Always allow" silently doing nothing; the chat auto-scroll hijack; the duplicated
 worse `toolSummary` that made Bash's `description` unreachable; chat-only sessions
-being undiscoverable; and per-session approval counts collapsing to a boolean.
+being undiscoverable; per-session approval counts collapsing to a boolean; and
+assistant text rendering as raw Markdown source; a render loop that hammered the
+API at ~270 req/s; and a backgrounded tab polling nothing and never catching up.
 
 ---
 
@@ -31,20 +33,17 @@ it needs widening.
 registers them (`Notification`, `SubagentStart`/`Stop`, `TaskCreated`/`Completed`,
 `WorktreeCreate`/`Remove`), but the server currently just republishes them as a
 generic `activity` event and **nothing consumes it**. The win: drop the 2.5s fleet
-poll to something much lazier and let hooks drive the refresh. Each poll re-reads
-every task file, tails a 96 KiB window per transcript, reads each worktree's plan
-file, and shells out to `git worktree list` — so this is a real cost, and it now
-also shells out to `claude agents --json` once per poll.
+poll to something much lazier and let hooks drive the refresh.
+
+Caching has already taken `/api/fleet` off the request path (`~430ms -> 1-3ms`
+served from a background-refreshed snapshot), so this is no longer a latency fix —
+it's about not rebuilding the fleet every ~1.5s in the background when nothing has
+changed. The build still walks every session dir, tails transcripts whose mtime
+moved, and shells out to `git worktree list` per repo.
 
 Also worth wiring: `TeammateIdle` exists as a hook event and maps exactly onto the
 "is this agent stuck?" question the teammates panel is trying to answer by
 timestamp heuristic today.
-
-## Cache `claude agents --json` (Monitor plane)
-
-Every `/api/fleet` spawns a subprocess. At the 2.5s poll that's ~24 spawns/minute
-per open tab. A short TTL cache (≈1s) in `internal/sessions.ts` would collapse
-concurrent callers onto one invocation without making the UI feel stale.
 
 ## Show each agent's branch and worktree at a glance (Monitor plane)
 
@@ -63,14 +62,6 @@ Replace the progress bar with a **vertical stepper** — one row per milestone w
 its label + state (done / in-progress / upcoming), driven by the same
 `plan`/`steps` data the checklist uses today.
 
-## Render transcripts as Markdown (Session view)
-
-Assistant messages render as plain text (`linkify` + `white-space: pre-wrap`).
-Render Markdown instead — headings, lists, code blocks, inline code, bold, links.
-`react-markdown` + `remark-gfm` (v10 / v4, React 19 compatible). Keep the shipped
-file-link behaviour by giving it custom `code` (run `linkify` on inline code so
-`` `src/foo.ts:12` `` stays clickable) and `a` renderers.
-
 ## Declutter long tool lines (Session view)
 
 There is **no truncation anywhere**: `.oc-tool` / `.oc-tool-arg` have
@@ -83,14 +74,6 @@ Reuse the pattern already in the repo: `TaskBoard`'s collapsible Completed group
 threshold constant + pure predicate in `shared/`, `useState` seeded from it, an
 identity latch so the poll can't re-collapse what the user just opened,
 `<button aria-expanded aria-controls>` + `hidden` on a kept-mounted body.
-
-## Collapse finished agents (Teammates)
-
-The adapter now reports **every** subagent and carries `stale` through, because
-dropping them meant a finished session showed "no teammates". The UI hasn't caught
-up: a long session lists every helper agent it ever spawned, flat. Group or collapse
-the stale ones (same collapsible pattern as above) so the active agents stay
-readable.
 
 ## Session summary component (Session view)
 

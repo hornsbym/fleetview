@@ -129,8 +129,11 @@ finished rendered "no teammates". The adapter now reports every agent and carrie
 - **Single package** (NOT a monorepo) — feature folders inside one project.
 - React 19 + TypeScript + Vite 8 (frontend) · Node 20.19+ via tsx (backend, Node
   stdlib `http`, no framework) · pnpm.
-- Runtime deps are exactly three: `@anthropic-ai/claude-agent-sdk` (pinned
-  `0.3.220`, no caret), `react`, `react-dom`.
+- Runtime deps are five: `@anthropic-ai/claude-agent-sdk` (pinned `0.3.220`, no
+  caret), `react`, `react-dom`, plus `react-markdown` + `remark-gfm` for rendering
+  assistant text. The markdown pair was added deliberately — hand-rolling a parser
+  is a known source of edge-case bugs (nested lists, fences, tables) — at a cost of
+  ~157 KB raw / ~47 KB gzip on the bundle. Keep new runtime deps this rare.
 - Local-only by default (`127.0.0.1`); config `~/.fleetview.json`.
 - House rules from NCS: external services behind an interface (→ `claude-adapter`),
   tokens-only styling (→ `src/ui/tokens.css`), servers report / UIs decide.

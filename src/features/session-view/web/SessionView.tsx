@@ -11,6 +11,7 @@ import type {
 } from '../shared/events';
 import './SessionView.css';
 import { linkify } from '../../../ui/FileLink';
+import { Markdown } from '../../../ui/Markdown';
 import { useVisiblePoll } from '../../../ui/useVisiblePoll';
 import type { Session } from '../../../lib/claude-adapter/types';
 
@@ -221,8 +222,14 @@ function TranscriptItem({ item, repo }: { item: ChatItem; repo: string }) {
   switch (item.kind) {
     case 'user':
       return <div className="oc-msg oc-user"><div className="oc-bubble">{linkify(item.text, repo)}</div></div>;
+    // Assistant text is Markdown (headings, lists, code fences, tables); user text
+    // is whatever you typed, so it stays literal.
     case 'assistant':
-      return <div className="oc-msg oc-assistant"><div className="oc-bubble">{linkify(item.text, repo)}</div></div>;
+      return (
+        <div className="oc-msg oc-assistant">
+          <div className="oc-bubble"><Markdown text={item.text} repo={repo} /></div>
+        </div>
+      );
     case 'tool':
       return <div className="oc-tool">⚙ {item.name}{item.summary && <span className="oc-tool-arg mono">: {linkify(item.summary, repo)}</span>}</div>;
     case 'result':
