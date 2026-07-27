@@ -69,6 +69,25 @@ async function worktreeAgents(repoCwd: string): Promise<Record<string, string>> 
   return map;
 }
 
+type WorktreeCache = (repoCwd: string) => Promise<Record<string, string>>;
+
+/**
+ * Memoize `git worktree list` per repo for the lifetime of ONE buildFleet call.
+ *
+ * Subagent discovery runs per session, and a repo commonly has dozens of sessions
+ * — without this, a single /api/fleet poll spawned one `git` process per session
+ * (measured: 35 spawns, 30s cold / 7.4s warm on an endpoint polled every 2.5s).
+ * Sessions in a repo share one worktree list, so one spawn per repo is enough.
+ */
+function worktreeCache(): WorktreeCache {
+  const cache = new Map<string, Promise<Record<string, string>>>();
+  return (repoCwd: string) => {
+    let hit = cache.get(repoCwd);
+    if (!hit) cache.set(repoCwd, hit = worktreeAgents(repoCwd));
+    return hit;
+  };
+}
+
 function newTeammate(partial: Partial<Teammate> & Pick<Teammate, 'agentId' | 'name' | 'agentType' | 'isLead'>): Teammate {
   return {
     cwd: null, worktree: null, task: null, action: null, actionAt: null,
@@ -97,10 +116,14 @@ function applyPlanFile(t: Teammate, pf: AgentPlanFile | null) {
 // team roster, so they're discovered from the session's subagents/ dir + meta.json.
 // This works identically for terminal-started sessions — verified: a session started
 // in a terminal had six agent-*.jsonl pairs here.
-async function discoverSubagents(repoCwd: string, sessionId: string): Promise<Teammate[]> {
+async function discoverSubagents(
+  repoCwd: string,
+  sessionId: string,
+  worktrees: WorktreeCache,
+): Promise<Teammate[]> {
   const dir = path.join(PROJECTS, encodeCwd(repoCwd), sessionId, 'subagents');
   let files: string[]; try { files = (await readdir(dir)).filter(f => /^agent-.*\.jsonl$/.test(f)); } catch { return []; }
-  const wt = await worktreeAgents(repoCwd);
+  const wt = await worktrees(repoCwd);
   const out: Teammate[] = [];
   for (const f of files) {
     const id = f.replace(/^agent-/, '').replace(/\.jsonl$/, '');
@@ -213,9 +236,11 @@ export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnap
     }
   }
 
-  // --- 4. Build the public Session for each draft.
-  const sessions: Session[] = [];
-  for (const d of drafts.values()) {
+  // --- 4. Build the public Session for each draft. Sessions are independent, so
+  //        this fans out — done sequentially it was the other half of the latency
+  //        problem (dozens of transcript reads + stat walks, one after another).
+  const worktrees = worktreeCache();
+  const sessions = await Promise.all([...drafts.values()].map(async (d): Promise<Session> => {
     if (!d.cwd) d.cwd = await transcriptCwd(await transcriptPath(d.id, null));
 
     let members: Teammate[];
@@ -261,7 +286,7 @@ export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnap
     // Subagent discovery is gated on cwd alone — NOT on liveness. A session that
     // has stopped still has teammates worth showing.
     if (d.cwd) {
-      for (const sub of await discoverSubagents(d.cwd, d.id)) {
+      for (const sub of await discoverSubagents(d.cwd, d.id, worktrees)) {
         // A self-reported plan file (sub.phase set) is authoritative; otherwise
         // fall back to the harness task list grouped by owner.
         if (!sub.phase) {
@@ -275,7 +300,7 @@ export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnap
     }
 
     const pendingApprovals = pending?.pendingBySession[d.id] ?? 0;
-    sessions.push({
+    return {
       id: d.id,
       live: d.live,
       attached: d.live,
@@ -297,8 +322,8 @@ export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnap
         completed: d.tasks.filter(t => t.status === 'completed').length,
       },
       members,
-    });
-  }
+    };
+  }));
 
   // --- 5. Bucket into projects. Watched repos are ADDITIVE, never a filter.
   const byProject: Record<string, Project> = {};

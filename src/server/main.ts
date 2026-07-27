@@ -44,13 +44,22 @@ const server = createServer(async (req, res) => {
     if (await handleHooksRoute(req, res)) return;
     if (await handleOpenRoute(req, res)) return;
 
-    // static SPA (prod only; dev is served by Vite)
+    // static SPA (prod only; dev is served by Vite).
+    // Asset filenames are content-hashed so they can cache forever, but index.html
+    // must NOT — it's what points at the current hash. Without this a rebuilt UI
+    // keeps serving the old bundle to an already-open tab.
     const rel = url.pathname === '/' ? '/index.html' : url.pathname;
     const file = path.join(DIST, rel);
+    const cache = (f: string) =>
+      f.endsWith('.html') ? 'no-cache' : 'public, max-age=31536000, immutable';
     try {
-      if ((await stat(file)).isFile()) return send(res, 200, await readFile(file), contentType(file));
+      if ((await stat(file)).isFile()) {
+        res.setHeader('cache-control', cache(file));
+        return send(res, 200, await readFile(file), contentType(file));
+      }
     } catch { /* fall through to SPA index */ }
     try {
+      res.setHeader('cache-control', 'no-cache');
       return send(res, 200, await readFile(path.join(DIST, 'index.html')), 'text/html; charset=utf-8');
     } catch {
       return send(res, 404, 'not found (run `pnpm dev` and use the Vite URL, or `pnpm build`)', 'text/plain');

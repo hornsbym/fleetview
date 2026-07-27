@@ -36,13 +36,29 @@ interface RawAgentSession {
   state?: string; // "working" | "blocked" | …
 }
 
+// Spawning the CLI costs ~0.3s. The fleet poll runs every 2.5s PER OPEN TAB, so
+// without this every tab pays for its own subprocess ~24×/minute. A sub-poll TTL
+// collapses concurrent callers onto one in-flight invocation while keeping the UI
+// effectively live. Keyed by cwd because `--cwd` changes the result.
+const LIVE_TTL_MS = 1000;
+const liveCache = new Map<string, { at: number; p: Promise<LiveSession[]> }>();
+
 /**
  * Live Claude Code sessions, optionally scoped to a repo.
  *
  * Never throws: a missing/failed `claude` binary yields `[]` so the monitor
  * plane degrades to disk-only discovery rather than breaking the fleet poll.
  */
-export async function liveSessions(cwd?: string): Promise<LiveSession[]> {
+export function liveSessions(cwd?: string): Promise<LiveSession[]> {
+  const key = cwd ?? '';
+  const hit = liveCache.get(key);
+  if (hit && Date.now() - hit.at < LIVE_TTL_MS) return hit.p;
+  const p = liveSessionsUncached(cwd);
+  liveCache.set(key, { at: Date.now(), p });
+  return p;
+}
+
+async function liveSessionsUncached(cwd?: string): Promise<LiveSession[]> {
   const args = ['agents', '--json'];
   if (cwd) args.push('--cwd', cwd);
   let stdout: string;
