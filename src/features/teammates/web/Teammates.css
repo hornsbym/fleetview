@@ -47,6 +47,14 @@
 
 .tm-name { font-weight: 600; color: var(--ink); }
 
+.tm-model {
+  font-size: 10px;
+  color: var(--dim);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
 /* Phase pill (M6 plan-gated agents) — hue = lifecycle stage.
    Base/planning/unknown reads faint; each known phase overrides below. */
 .tm-phase {

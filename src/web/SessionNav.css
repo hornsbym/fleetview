@@ -1,0 +1,91 @@
+.snav {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.snav-group {
+  margin-top: 8px;
+}
+.snav-project-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.snav-project-btn:hover {
+  color: var(--lead);
+}
+.snav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 8px;
+}
+.snav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.snav-item:hover {
+  background: var(--panel2);
+}
+.snav-item.sel {
+  background: var(--panel2);
+  border: 1px solid var(--lead);
+}
+.snav-item.done {
+  border: 1px solid var(--done);
+}
+.snav-item.flagged {
+  border: 1px solid var(--attention);
+}
+
+.snav-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.snav-dot.snav-busy {
+  background: var(--done);
+  animation: pulse 1.6s infinite;
+}
+.snav-dot.snav-idle {
+  background: var(--dim);
+}
+.snav-dot.snav-waiting {
+  background: var(--attention);
+}
+
+.snav-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snav-badge {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--attention);
+}

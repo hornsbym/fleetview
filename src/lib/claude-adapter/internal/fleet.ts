@@ -13,7 +13,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { HOME, TASKS, TEAMS, PROJECTS, encodeCwd } from './paths';
-import { readActivity, transcriptCwd } from './transcripts';
+import { readActivity, readModel, transcriptCwd } from './transcripts';
 import { liveSessions, knownSessions, canonicalSessionId } from './sessions';
 import { completedToolUses } from './digest';
 import type {
@@ -146,6 +146,7 @@ async function discoverSubagents(
     let mtime = 0; try { mtime = (await stat(full)).mtimeMs; } catch { continue; }
     const meta = await readMeta(path.join(dir, `agent-${id}.meta.json`));
     const a = await readActivity(full);
+    const model = await readModel(full);
     const t = newTeammate({
       agentId: id,
       name: meta.name || meta.agentType || `agent-${id.slice(0, 8)}`,
@@ -155,6 +156,7 @@ async function discoverSubagents(
       cwd: wt[id] || null,
       worktree: wt[id] || null,
       action: a.action, actionAt: a.at, plan: a.plan,
+      model,
       hasTranscript: true,
       stale: Date.now() - mtime > 15000,
       finished: typeof meta.toolUseId === 'string' ? returned.has(meta.toolUseId) : null,
@@ -295,6 +297,7 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
           const a = await readActivity(tp);
           m.action = a.action; m.actionAt = a.at; m.hasTranscript = true;
           if (a.plan) m.plan = a.plan;
+          m.model = await readModel(tp);
         }
       }
     }

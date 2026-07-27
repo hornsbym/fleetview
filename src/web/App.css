@@ -31,17 +31,17 @@
 .warn { background: var(--panel); border: 1px solid var(--attention); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; color: var(--ink); font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
 .warn-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.tile { text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--ink); cursor: pointer; font: inherit; }
+.session-list { display: flex; flex-direction: column; gap: 8px; }
+.tile { text-align: left; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--ink); cursor: pointer; font: inherit; width: 100%; }
 .tile:hover { background: var(--panel2); border-color: var(--lead); }
 .tile.flagged { border-color: var(--attention); box-shadow: 0 0 0 1px var(--attention) inset; }
 .tile.completed { border-color: var(--done); box-shadow: 0 0 0 1px var(--done) inset; }
 .tile-head { display: flex; align-items: center; gap: 8px; }
 .tile-own { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--lead); border: 1px solid var(--border); border-color: #1f3a5f; border-radius: 4px; padding: 1px 6px; }
 .tile-approve { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--attention); border: 1px solid var(--attention); border-radius: 4px; padding: 1px 6px; }
-.tile-id { margin-left: auto; font-size: 11px; color: var(--dim); max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile-meta { margin-top: 10px; font-size: 12px; color: var(--dim); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.tile-counts { display: flex; gap: 6px; }
+.tile-name { margin-top: 8px; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.tile-uuid { margin-top: 4px; font-size: 11px; color: var(--faint); }
+.tile-waiting { margin-top: 6px; font-size: 11px; color: var(--active); }
 
 .chip { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--dim); }
 .chip.a { color: var(--active); border-color: #5a4415; }

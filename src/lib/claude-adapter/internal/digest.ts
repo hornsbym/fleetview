@@ -186,21 +186,99 @@ async function readReport(cwd: string | null, sessionId: string): Promise<AgentR
   }
 }
 
-/** Conceptual description of recent activity — no tool names, no commands. */
+/** Conceptual description of recent activity derived from the tool trail.
+ *  Aims for sentences like "Investigating route handler in main.ts" or
+ *  "Waiting for report back from code-reviewer agent" rather than generic
+ *  "editing files" or tool names. */
 function describeActivity(trail: TrailItem[]): string | null {
   if (!trail.length) return null;
-  const kind = (name: string): string => {
-    if (name === 'Edit' || name === 'Write' || name === 'NotebookEdit') return 'editing files';
-    if (name === 'Read' || name === 'Grep' || name === 'Glob') return 'reading through the codebase';
-    if (name === 'Agent' || name === 'Task') return 'coordinating subagents';
-    if (name.startsWith('mcp__')) return 'working with an external tool';
-    if (name === 'Bash') return 'running commands';
-    return 'working';
-  };
-  const counts = new Map<string, number>();
-  for (const t of trail) counts.set(kind(t.name), (counts.get(kind(t.name)) ?? 0) + 1);
-  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  return top ? `Recently ${top}.` : null;
+
+  // Most recent tool call is the best signal for "what it's doing right now".
+  const latest = trail[trail.length - 1];
+  const desc = describeOne(latest);
+  if (desc) return desc;
+
+  // If the latest didn't produce a good sentence, try the second-most-recent.
+  if (trail.length > 1) {
+    const prev = describeOne(trail[trail.length - 2]);
+    if (prev) return prev;
+  }
+
+  return null;
+}
+
+function describeOne(item: TrailItem): string | null {
+  const name = item.name;
+  const summary = item.summary;
+
+  if (name === 'Agent' || name === 'Task') {
+    // summary looks like "Spawn code-reviewer: Review the auth middleware"
+    const m = summary.match(/^Spawn\s+(\S+?)(?::\s*(.+))?$/);
+    if (m) {
+      const agentType = m[1];
+      const task = m[2];
+      if (task) return `Delegating to ${agentType} agent — ${task}`;
+      return `Waiting for report back from ${agentType} agent`;
+    }
+    return 'Coordinating subagents';
+  }
+
+  if (name === 'Edit' || name === 'Write' || name === 'NotebookEdit') {
+    // summary looks like "Edit App.tsx" or "Write store.ts"
+    const file = summary.replace(/^(Edit|Write|NotebookEdit)\s*/, '');
+    if (file) return `Writing code in ${file}`;
+    return 'Writing code';
+  }
+
+  if (name === 'Read') {
+    const file = summary.replace(/^Read\s*/, '');
+    if (file) return `Investigating ${file}`;
+    return 'Reading through the codebase';
+  }
+
+  if (name === 'Grep') {
+    const pattern = summary.replace(/^Grep\s*/, '');
+    if (pattern) return `Searching for "${pattern}"`;
+    return 'Searching the codebase';
+  }
+
+  if (name === 'Glob') {
+    const pattern = summary.replace(/^Glob\s*/, '');
+    if (pattern) return `Looking for files matching ${pattern}`;
+    return 'Scanning file structure';
+  }
+
+  if (name === 'Bash') {
+    // summary looks like "Bash: description" or "Bash: raw command"
+    const cmd = summary.replace(/^Bash:\s*/, '');
+    if (!cmd) return 'Executing a command';
+    // If the tool had a human-written description, use it directly.
+    // Heuristic: descriptions are sentence-like (start with uppercase or a verb),
+    // while raw commands start with lowercase or special chars.
+    if (/^[A-Z]/.test(cmd) && !cmd.startsWith('/')) return cmd;
+    // Try to extract intent from common command patterns
+    if (/\b(test|jest|vitest|mocha|pytest)\b/i.test(cmd)) return 'Running tests';
+    if (/\btsc\b|type.?check/i.test(cmd)) return 'Type-checking the project';
+    if (/\b(build|compile|vite build|webpack)\b/i.test(cmd)) return 'Building the project';
+    if (/\bgit\s+(status|diff|log)\b/.test(cmd)) return 'Checking git state';
+    if (/\bgit\s+commit\b/.test(cmd)) return 'Committing changes';
+    if (/\b(curl|fetch|wget)\b/.test(cmd)) return 'Making an HTTP request';
+    if (/\b(npm|pnpm|yarn)\s+(install|add)\b/.test(cmd)) return 'Installing dependencies';
+    if (/\bdev\b|server/i.test(cmd)) return 'Starting a dev server';
+    return `Executing: ${cmd.slice(0, 60)}`;
+  }
+
+  if (name === 'AskUserQuestion') {
+    return 'Waiting for your answer';
+  }
+
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__');
+    const server = parts[1] || 'external';
+    return `Working with ${server}`;
+  }
+
+  return null;
 }
 
 /**

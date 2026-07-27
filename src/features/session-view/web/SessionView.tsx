@@ -16,6 +16,7 @@ import { Markdown } from '../../../ui/Markdown';
 import { SessionEnvironmentPanel } from './SessionEnvironment';
 
 import { useVisiblePoll } from '../../../ui/useVisiblePoll';
+import { FocusButton } from '../../terminal-focus/web';
 import type { Session } from '../../../lib/claude-adapter/types';
 
 export interface SessionViewProps {
@@ -198,6 +199,7 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
         <span className="oc-sid" title={sessionId}>{label}</span>
         {session?.kind === 'background' && <span className="oc-sid mono">bg</span>}
         <span className="oc-spacer" />
+        <FocusButton sessionId={sessionId} live={live} cwd={session?.cwd} />
         <span className="oc-readonly" title="FleetView shows what your terminal session is doing; it never sends to it.">
           read-only
         </span>

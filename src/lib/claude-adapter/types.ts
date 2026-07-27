@@ -37,6 +37,7 @@ export interface Teammate {
   cwd: string | null;
   worktree: string | null;
   desc?: string;
+  model?: string | null;
   /** Self-reported lifecycle phase (M6); present only for plan-gated agents. */
   phase?: TeammatePhase | (string & {});
   /** The in-progress task this agent owns, if any. */

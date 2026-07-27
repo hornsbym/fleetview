@@ -9,6 +9,7 @@ import { SessionView, NowPanel, DonePanel } from '../features/session-view/web';
 import { HookSetup } from '../features/hooks/web';
 import { useVisiblePoll } from '../ui/useVisiblePoll';
 import { usePath, parseRoute, navigate, projectPath, sessionPath } from './router';
+import './SessionNav.css';
 
 export function App() {
   const [fleet, setFleet] = useState<Fleet | null>(null);
@@ -100,8 +101,7 @@ export function App() {
       </header>
       <div className="layout">
         <aside className="sidebar">
-          <div className="label">Projects</div>
-          <ProjectSwitcher projects={fleet.projects} selected={selectedRepo} onSelect={(p) => navigate(projectPath(toSlug.get(p) ?? ''))} completed={completed} />
+          <SessionNav fleet={fleet} slugMaps={slugMaps} activeSessionId={route.sessionId ?? null} completed={completed} clearCompleted={clearCompleted} />
         </aside>
         <main className="main">
           {!project ? (
@@ -133,7 +133,7 @@ function ProjectView({ project, slug, completed, clearCompleted }: { project: Pr
           No sessions yet. Run <code>claude</code> in this folder and it will appear here.
         </div>
       ) : (
-        <div className="tiles">
+        <div className="session-list">
           {project.sessions.map((s) => <SessionTile key={s.id} slug={slug} s={s} completed={completed.has(s.id)} clearCompleted={clearCompleted} />)}
         </div>
       )}
@@ -142,7 +142,6 @@ function ProjectView({ project, slug, completed, clearCompleted }: { project: Pr
 }
 
 function SessionTile({ slug, s, completed, clearCompleted }: { slug: string; s: Session; completed: boolean; clearCompleted: (id: string) => void }) {
-  const teammates = s.members.filter((m) => !m.isLead).length;
   const cls = 'tile' + (s.needsApproval ? ' flagged' : '') + (completed ? ' completed' : '');
   return (
     <button type="button" className={cls} onClick={() => { if (completed) clearCompleted(s.id); navigate(sessionPath(slug, s.id)); }}>
@@ -154,18 +153,66 @@ function SessionTile({ slug, s, completed, clearCompleted }: { slug: string; s: 
             {s.pendingApprovals > 1 ? `${s.pendingApprovals} need approval` : 'needs approval'}
           </span>
         )}
-        <span className="mono tile-id" title={s.id}>{s.name || s.id}</span>
       </div>
-      <div className="tile-meta">
-        {teammates} teammate{teammates !== 1 ? 's' : ''}
-        {s.waitingFor && <span className="chip">waiting · {s.waitingFor}</span>}
-        <span className="tile-counts">
-          <span className="chip">{s.counts.pending} upcoming</span>
-          <span className="chip a">{s.counts.in_progress} active</span>
-          <span className="chip d">{s.counts.completed} done</span>
-        </span>
-      </div>
+      {s.name && <div className="tile-name">{s.name}</div>}
+      <div className="tile-uuid mono">{s.id}</div>
+      {s.waitingFor && <div className="tile-waiting">waiting · {s.waitingFor}</div>}
     </button>
+  );
+}
+
+function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearCompleted }: {
+  fleet: Fleet;
+  slugMaps: { toSlug: Map<string, string>; toPath: Map<string, string> };
+  activeSessionId: string | null;
+  completed: Set<string>;
+  clearCompleted: (id: string) => void;
+}) {
+  const groups = useMemo(() => {
+    const out: { project: Project; slug: string; sessions: Session[] }[] = [];
+    for (const p of fleet.projects) {
+      const live = p.sessions.filter(s => s.live);
+      if (live.length === 0) continue;
+      out.push({ project: p, slug: slugMaps.toSlug.get(p.path) ?? '', sessions: live });
+    }
+    return out;
+  }, [fleet, slugMaps]);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="snav">
+      <div className="label">Active sessions</div>
+      {groups.map(({ project, slug, sessions }) => (
+        <div key={project.path} className="snav-group">
+          <button
+            type="button"
+            className="snav-project-btn"
+            onClick={() => navigate(projectPath(slug))}
+          >
+            {project.name}
+          </button>
+          <div className="snav-list">
+            {sessions.map(s => {
+              const active = s.id === activeSessionId;
+              const done = completed.has(s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={'snav-item' + (active ? ' sel' : '') + (done ? ' done' : '') + (s.needsApproval ? ' flagged' : '')}
+                  onClick={() => { if (done) clearCompleted(s.id); navigate(sessionPath(slug, s.id)); }}
+                >
+                  <span className={`snav-dot snav-${s.status || 'live'}`} />
+                  <span className="snav-name">{s.name || s.id}</span>
+                  {s.needsApproval && <span className="snav-badge">!</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
