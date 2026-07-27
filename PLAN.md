@@ -214,8 +214,12 @@ A **read-only** page per session: its transcript (seeded from
 `readSessionHistory`, re-tailed every 2.5s while live), the session's name /
 kind / status, and the **approval cards** for permissions it asked about. Owns the
 `/api/session/*` routes — `stream` (SSE), `history`, `agent` (one subagent's
-transcript), `pending`, and `permission` (the decision). There is **no composer**
-and no start/stop/resume. It never reads `~/.claude` directly.
+transcript), `digest`, `pending`, and `permission` (the decision). There is **no
+composer** and no start/stop/resume. It never reads `~/.claude` directly.
+
+Also renders **Working on now** (current tool call + trail + the request it's
+serving) and **Done so far** (commits, completed tasks, approved plans). Both come
+from one `SessionDigest`, scanned incrementally from the transcript — see §7.
 
 ### hooks — the permission bridge
 Receives Claude Code's native hooks. `POST /api/hooks/permission` parks the
@@ -241,6 +245,21 @@ export * from './types'
 ```
 **The interface is read-only by design** — there is deliberately no way to spawn,
 message, resume or stop a session through it.
+
+### Session digest — compaction-proof by construction
+`readSessionDigest(sessionId, cwd)` derives "what it's doing now" and "what it has
+finished" from the transcript. This matters for durability: **compaction does not
+delete history from the JSONL** — verified against a real compacted session
+(18.6 MB, 8 `compact_boundary` entries, 949 entries still present before the
+first). Compaction shrinks what the *model* can see; the file keeps everything. So
+the digest needs no separate persistence.
+
+Reading a whole multi-MB file per poll would be far too expensive, so the scan is
+**incremental**: each transcript keeps a byte cursor and only newly-appended lines
+are parsed (the same trick Claude Code uses for its own job tracking —
+`linkScanOffset` in `~/.claude/jobs/<id>/state.json`). Measured: 20 ms for the
+first full scan of a 2.3 MB transcript, ~1 ms per poll thereafter. Partial trailing
+lines are left for the next pass rather than parsed as garbage.
 
 ### Session identity — one id, one alias form
 The canonical id is always the **full session UUID**. Task directories spell it
@@ -276,6 +295,7 @@ protocol are `internal/` and never imported by features.
 | GET | `/api/session/stream?sessionId=` | session-view — SSE, `Last-Event-ID` replay, 15s heartbeat |
 | GET | `/api/session/history?sessionId=` | session-view — `ChatItem[]` |
 | GET | `/api/session/agent?sessionId=&agentId=` | session-view — one subagent's `ChatItem[]` |
+| GET | `/api/session/digest?sessionId=&cwd=` | session-view — `SessionDigest` (doing now + done so far) |
 | GET | `/api/session/pending?sessionId=` | session-view — parked `PermissionRequest[]` |
 | POST | `/api/session/permission` | session-view — `{requestId, decision}` |
 | POST | `/api/hooks/permission` | hooks — Claude Code's `PermissionRequest`; **response held open** |

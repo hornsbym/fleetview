@@ -5,13 +5,17 @@ export type {
   SessionEvent,
   PermissionDecision,
   PermissionRequest,
+  SessionDigest,
+  Milestone,
+  TrailItem,
 } from '../../../lib/claude-adapter/types';
 
-import type { ChatItem, PermissionRequest } from '../../../lib/claude-adapter/types';
+import type { ChatItem, PermissionRequest, SessionDigest } from '../../../lib/claude-adapter/types';
 
 export interface OkResponse { ok: boolean; reason?: string }
 export interface HistoryResponse extends OkResponse { items?: ChatItem[] }
 export interface PendingResponse extends OkResponse { pending?: PermissionRequest[] }
+export interface DigestResponse extends OkResponse { digest?: SessionDigest }
 
 export interface PermissionBody {
   requestId: string;

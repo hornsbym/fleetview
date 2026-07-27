@@ -185,6 +185,41 @@ export interface SessionEvent {
   at?: string;
 }
 
+// --- Session digest: "doing now" + "done so far" ---
+
+/** One recent tool call, for the activity trail. */
+export interface TrailItem {
+  name: string;
+  summary: string;
+  at: string | null;
+}
+
+/** A high-level thing the session actually finished. */
+export interface Milestone {
+  /** `commit` is the strongest signal — a verifiable, named unit of work. */
+  kind: 'commit' | 'task' | 'plan' | 'compaction';
+  text: string;
+  at: string | null;
+}
+
+/**
+ * Derived from the session transcript, which retains everything across context
+ * compactions — so this survives compaction without a separate store.
+ */
+export interface SessionDigest {
+  /** The most recent tool call: what it's doing right now. */
+  doing: TrailItem | null;
+  /** Recent tool calls, newest first. */
+  trail: TrailItem[];
+  /** Milestones, newest first. */
+  done: Milestone[];
+  compactions: number;
+  edits: number;
+  tools: number;
+  /** The last real user prompt — what it's currently working toward. */
+  lastRequest: string | null;
+}
+
 /** One normalized transcript entry, for rendering a session read-only. */
 export type ChatItem =
   | { kind: 'user'; text: string }

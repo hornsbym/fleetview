@@ -7,7 +7,7 @@
 // There is deliberately no start / stop / message route. The terminal session is
 // the source of truth; FleetView reads it.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readSessionHistory, readSubagentHistory, type PermissionDecision } from '../../../lib/claude-adapter/index';
+import { readSessionHistory, readSubagentHistory, readSessionDigest, type PermissionDecision } from '../../../lib/claude-adapter/index';
 import { bufferSince, subscribe, pendingPermissions, resolvePermission } from '../../../server/bus';
 
 const HEARTBEAT_MS = 15_000;
@@ -78,6 +78,15 @@ export async function handleSessionRoute(req: IncomingMessage, res: ServerRespon
       const agentId = url.searchParams.get('agentId') ?? '';
       if (!sessionId || !agentId) { json(res, { ok: false, reason: 'missing-params' }); return true; }
       json(res, { ok: true, items: await readSubagentHistory(sessionId, agentId) });
+      return true;
+    }
+
+    // "Doing now" + "done so far". Incrementally scanned server-side, so this is
+    // cheap to poll even on a large transcript.
+    if (req.method === 'GET' && url.pathname === '/api/session/digest') {
+      if (!sessionId) { json(res, { ok: false, reason: 'missing-sessionId' }); return true; }
+      const cwd = url.searchParams.get('cwd');
+      json(res, { ok: true, digest: await readSessionDigest(sessionId, cwd) });
       return true;
     }
 

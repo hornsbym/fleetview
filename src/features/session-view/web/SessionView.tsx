@@ -7,11 +7,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ChatItem, SessionEvent, PermissionDecision, PermissionRequest,
-  HistoryResponse, PendingResponse, OkResponse,
+  HistoryResponse, PendingResponse, OkResponse, DigestResponse, SessionDigest,
 } from '../shared/events';
 import './SessionView.css';
 import { linkify } from '../../../ui/FileLink';
 import { Markdown } from '../../../ui/Markdown';
+import { NowPanel, DonePanel } from './SessionDigest';
 import { useVisiblePoll } from '../../../ui/useVisiblePoll';
 import type { Session } from '../../../lib/claude-adapter/types';
 
@@ -20,6 +21,8 @@ export interface SessionViewProps {
   session: Session | null;
   repo: string;
   sessionId: string;
+  /** Lifts the digest to the page so the panels can live in the side column. */
+  onDigest?: (d: SessionDigest | null) => void;
 }
 
 /** Re-poll cadence for a live transcript. Claude Code appends to the session JSONL
@@ -43,7 +46,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function SessionView({ session, repo, sessionId }: SessionViewProps) {
+export function SessionView({ session, repo, sessionId, onDigest }: SessionViewProps) {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [pending, setPending] = useState<PermissionRequest[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -92,6 +95,22 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
     })();
   }, [sessionId, live]);
   useVisiblePoll(tail, TAIL_MS, `${sessionId}:${live}`);
+
+  // Digest ("doing now" + "done so far"). Scanned incrementally server-side, so
+  // polling it is ~1ms after the first call even on a multi-MB transcript.
+  const [digest, setDigest] = useState<SessionDigest | null>(null);
+  useEffect(() => { setDigest(null); }, [sessionId]);
+  const pullDigest = useCallback(() => {
+    if (!sessionId) return;
+    const q = new URLSearchParams({ sessionId, ...(session?.cwd ? { cwd: session.cwd } : {}) });
+    void (async () => {
+      try {
+        const d: DigestResponse = await (await fetch(`/api/session/digest?${q}`)).json();
+        if (d.ok && d.digest) { setDigest(d.digest); onDigest?.(d.digest); }
+      } catch { /* keep last known */ }
+    })();
+  }, [sessionId, session?.cwd, onDigest]);
+  useVisiblePoll(pullDigest, TAIL_MS, `${sessionId}:${live}`);
 
   // Parked permissions: pushed over SSE, reconciled by poll.
   useEffect(() => {
@@ -170,6 +189,8 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
           read-only
         </span>
       </div>
+
+      <NowPanel digest={digest} live={live} />
 
       <div className="oc-transcript" ref={scrollRef} onScroll={onScroll}>
         {items.length === 0 ? (

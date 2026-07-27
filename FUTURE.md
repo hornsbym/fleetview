@@ -19,6 +19,16 @@ API at ~270 req/s; and a backgrounded tab polling nothing and never catching up.
 
 ---
 
+## Richer "done so far" signals (Session view)
+
+The digest currently recognizes git commits, completed harness tasks, approved
+plans and compaction boundaries. Commits are the strongest signal — verifiable and
+self-titled — but a session that doesn't commit shows very little. Worth adding:
+PR creation (`gh pr create`), test runs that pass, and file-level milestones
+(created X, deleted Y). Note the commit parser only matches `git commit` in
+*command position* and only trusts a heredoc when `-F -` is present — matching it
+anywhere reported a Python heredoc that merely mentioned the string as a commit.
+
 ## Read-only teammate pages (Monitor plane)
 
 The **server half is done** — `GET /api/session/agent?sessionId=&agentId=` returns
@@ -75,13 +85,15 @@ threshold constant + pure predicate in `shared/`, `useState` seeded from it, an
 identity latch so the poll can't re-collapse what the user just opened,
 `<button aria-expanded aria-controls>` + `hidden` on a kept-mounted body.
 
-## Session summary component (Session view)
+## Model-generated session summary (Session view)
 
-A sentence or two describing **what the session you're looking at is doing**,
-cutting through the raw tool-call stream. Cheap derivation (latest task
-`activeForm` / `.fleetview/plan.json` phase + last tool line) vs. a periodic
-model-generated line — decide before building. Applies to session pages and the
-future teammate pages.
+The **cheap-derivation half shipped** as the "Working on now" panel: last user
+request + current tool call + a trail of recent ones, all from the digest. What's
+still open is the *generated* version — a sentence describing what the session is
+actually accomplishing, rather than which tool it just ran. Decide whether that's
+worth a model call per session before building it.
+
+Also unbuilt: applying either panel to the future read-only teammate pages.
 
 ## Use page titles to identify sessions and surface attention (UI)
 

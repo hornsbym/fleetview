@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 // Type-only import: erased at build, so no Node code leaks into the browser bundle.
-import type { Fleet, Project, Session } from '../lib/claude-adapter/types';
+import type { Fleet, Project, Session, SessionDigest } from '../lib/claude-adapter/types';
 import { ProjectSwitcher, AddProject } from '../features/projects/web';
 import { projectSlugs } from '../features/projects/shared/slug';
 import { Teammates } from '../features/teammates/web';
 import { TaskBoard } from '../features/task-board/web';
-import { SessionView } from '../features/session-view/web';
+import { SessionView, DonePanel } from '../features/session-view/web';
 import { HookSetup } from '../features/hooks/web';
 import { useVisiblePoll } from '../ui/useVisiblePoll';
 import { usePath, parseRoute, navigate, projectPath, sessionPath } from './router';
@@ -126,6 +126,10 @@ function SessionTile({ slug, s }: { slug: string; s: Session }) {
 }
 
 function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: string; sessionId: string; session: Session | null }) {
+  // The digest is fetched once by SessionView (which renders "Working on now"
+  // above the transcript) and lifted here so "Done so far" can sit in the side
+  // column without a second request.
+  const [digest, setDigest] = useState<SessionDigest | null>(null);
   return (
     <div className="sp">
       <div className="sp-crumbs">
@@ -134,8 +138,11 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
         <span className="mono sp-crumb-id" title={sessionId}>{session?.name || sessionId}</span>
       </div>
       <div className="sp-grid">
-        <div className="sp-chat"><SessionView session={session} repo={repo} sessionId={sessionId} /></div>
+        <div className="sp-chat">
+          <SessionView session={session} repo={repo} sessionId={sessionId} onDigest={setDigest} />
+        </div>
         <div className="sp-agents">
+          <DonePanel digest={digest} />
           <section className="card">
             <div className="col">
               <h3>Team — what each agent is doing</h3>
