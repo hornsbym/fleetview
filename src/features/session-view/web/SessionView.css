@@ -103,9 +103,18 @@
 
 .oc-msg {
   display: flex;
+  align-items: flex-end;
+  gap: 6px;
 }
 .oc-msg.oc-user {
   justify-content: flex-end;
+}
+.oc-ts {
+  flex: none;
+  font-size: 10px;
+  color: var(--faint);
+  white-space: nowrap;
+  padding-bottom: 2px;
 }
 .oc-bubble {
   max-width: 85%;

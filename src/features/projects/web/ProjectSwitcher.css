@@ -45,6 +45,16 @@
   background: var(--attention);
 }
 .ps-card.flagged.flag-blocked::before { background: var(--blocked); }
+.ps-card.completed::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--done);
+}
 
 .ps-signals { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .ps-badge {

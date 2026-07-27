@@ -9,6 +9,7 @@ export interface ProjectSwitcherProps {
   projects: Project[];
   selected: string | null;
   onSelect: (path: string) => void;
+  completed?: Set<string>;
 }
 
 interface Signal {
@@ -34,7 +35,7 @@ function applyHeldOrder(sorted: Project[], held: string[]): Project[] {
     .map((entry) => entry.project);
 }
 
-export function ProjectSwitcher({ projects, selected, onSelect }: ProjectSwitcherProps) {
+export function ProjectSwitcher({ projects, selected, onSelect, completed }: ProjectSwitcherProps) {
   // The fleet re-polls every 2.5s, and a re-sort can slide a card out from under an
   // in-flight click. So the ORDER freezes while a pointer or focus is in the list —
   // the only window where moving hurts; card contents keep updating throughout.
@@ -92,9 +93,10 @@ export function ProjectSwitcher({ projects, selected, onSelect }: ProjectSwitche
         const sessions = p.sessions.length;
         const attn = projectAttention(p);
         const rows = signals(attn);
+        const hasDone = completed ? p.sessions.some((s) => completed.has(s.id)) : false;
         const flag = attn.needsAttention
           ? ' flagged' + (attn.awaitingApproval > 0 ? '' : ' flag-blocked')
-          : '';
+          : hasDone ? ' completed' : '';
         return (
           <button
             key={p.path}

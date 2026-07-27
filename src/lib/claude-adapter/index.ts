@@ -13,6 +13,7 @@ export * from './types';
 export { readSessionHistory, readSubagentHistory } from './internal/history';
 export { readSessionDigest } from './internal/sessions';
 export { liveSessions, knownSessions, canonicalSessionId, isWaiting, resolveParentSession } from './internal/sessions';
+export { readSessionEnvironment } from './internal/environment';
 
 // Building the fleet costs a few hundred ms — it walks every session, every
 // subagent dir and every worktree. Node is single-threaded, so paying that on the

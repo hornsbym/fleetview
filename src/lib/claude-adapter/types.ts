@@ -214,7 +214,7 @@ export interface TrailItem {
 export interface Milestone {
   /** `reported` = the agent said so itself; the rest are derived from the transcript.
    *  `commit` is the strongest derived signal — verifiable and self-titled. */
-  kind: 'reported' | 'commit' | 'task' | 'plan' | 'compaction';
+  kind: 'reported' | 'commit' | 'task' | 'plan' | 'compaction' | 'subagent';
   text: string;
   at: string | null;
 }
@@ -257,9 +257,22 @@ export interface SessionDigest {
   lastRequest: string | null;
 }
 
+// --- Session environment: metadata from the init system message ---
+
+/** Static metadata extracted from the session's init system message. */
+export interface SessionEnvironment {
+  cwd: string;
+  model: string;
+  skills: string[];
+  tools: string[];
+  mcpServers: { name: string; status: string }[];
+  permissionMode: string;
+  version: string;
+}
+
 /** One normalized transcript entry, for rendering a session read-only. */
 export type ChatItem =
-  | { kind: 'user'; text: string }
-  | { kind: 'assistant'; text: string }
-  | { kind: 'tool'; name: string; summary: string }
-  | { kind: 'result'; tokens?: number };
+  | { kind: 'user'; text: string; at?: string }
+  | { kind: 'assistant'; text: string; at?: string }
+  | { kind: 'tool'; name: string; summary: string; at?: string }
+  | { kind: 'result'; tokens?: number; at?: string };

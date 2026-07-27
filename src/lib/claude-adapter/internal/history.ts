@@ -21,23 +21,24 @@ function normalize(msgs: SessionMessage[]): ChatItem[] {
   for (const m of msgs) {
     const msg = m.message as { role?: string; content?: unknown } | undefined;
     if (!msg) continue;
+    const at = (m as unknown as { timestamp?: string }).timestamp || undefined;
     if (m.type === 'user') {
       // Skip tool_result-only user messages — those are tool plumbing, not prompts.
       const c = msg.content;
       const isToolResult = Array.isArray(c) && c.every((b: any) => b?.type === 'tool_result');
       if (isToolResult) continue;
       const text = textOf(c);
-      if (text.trim()) items.push({ kind: 'user', text });
+      if (text.trim()) items.push({ kind: 'user', text, at });
     } else if (m.type === 'assistant') {
       const c = Array.isArray(msg.content) ? msg.content : [];
       const text = textOf(c);
-      if (text.trim()) items.push({ kind: 'assistant', text });
+      if (text.trim()) items.push({ kind: 'assistant', text, at });
       for (const b of c as any[]) {
         // summarizeTool prefers Bash's own `description` over the raw command —
         // the human-readable text the model already wrote. v1 had a second, worse
         // copy of this here that made `description` unreachable (FUTURE.md).
         if (b?.type === 'tool_use') {
-          items.push({ kind: 'tool', name: b.name ?? 'tool', summary: summarizeTool(b.name, b.input) });
+          items.push({ kind: 'tool', name: b.name ?? 'tool', summary: summarizeTool(b.name, b.input), at });
         }
       }
     }
