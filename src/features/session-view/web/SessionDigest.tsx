@@ -1,14 +1,14 @@
-// Two panels for the session page:
-//   • NowPanel  — what this agent is doing right now, with the trail that led here.
-//   • DonePanel — the high-level things it has actually finished this session.
+// The orientation panels for a session: enough to re-enter a session's context
+// after being away, without reading the transcript.
 //
-// Both come from one server-side digest of the session transcript. Because the
-// transcript keeps everything across context compactions, the "done" list does
-// too — it is not reconstructed from the model's (shrinking) context.
-import type { Milestone, SessionDigest, TrailItem } from '../shared/events';
+//   • NowPanel  — 1-3 sentences on the conceptual work in flight. Never a command.
+//   • DonePanel — the running list of what this session has accomplished.
+//
+// Both prefer the agent's own account (`.fleetview/sessions/<id>.json`) and fall
+// back to what can be derived from the transcript.
+import type { Milestone, SessionDigest } from '../shared/events';
 import './SessionDigest.css';
 
-/** "12s ago" / "4m ago" — same shape the teammates panel uses. */
 function ago(at: string | null): string {
   if (!at) return '';
   const ms = Date.now() - new Date(at).getTime();
@@ -21,6 +21,7 @@ function ago(at: string | null): string {
 }
 
 const KIND_LABEL: Record<Milestone['kind'], string> = {
+  reported: '•',
   commit: 'commit',
   task: 'task',
   plan: 'plan',
@@ -28,42 +29,23 @@ const KIND_LABEL: Record<Milestone['kind'], string> = {
 };
 
 export function NowPanel({ digest, live }: { digest: SessionDigest | null; live: boolean }) {
-  const doing = digest?.doing ?? null;
-
   return (
-    <section className="dg dg-now" aria-label="What this agent is doing now">
+    <section className="dg dg-now" aria-label="What this agent is working on now">
       <div className="dg-head">
         <h3>Working on now</h3>
         {live && <span className="dg-pulse" aria-hidden="true" />}
+        {digest?.reported && <span className="dg-src" title="Reported by the agent itself">self-reported</span>}
       </div>
 
-      {digest?.lastRequest && (
-        <div className="dg-goal" title={digest.lastRequest}>
-          <span className="dg-goal-label">Toward</span>
-          {digest.lastRequest}
-        </div>
-      )}
+      {digest?.now
+        ? <p className="dg-prose">{digest.now}</p>
+        : <p className="dg-none">{live ? 'Nothing reported yet.' : 'This session is not running.'}</p>}
 
-      {doing ? (
-        <>
-          <div className="dg-doing">
-            <span className="dg-tool mono">{doing.name}</span>
-            <span className="dg-summary">{doing.summary}</span>
-            <span className="dg-when">{ago(doing.at)}</span>
-          </div>
-          {digest && digest.trail.length > 1 && (
-            <ol className="dg-trail">
-              {digest.trail.slice(1).map((t: TrailItem, i: number) => (
-                <li key={i}>
-                  <span className="dg-tool mono">{t.name}</span>
-                  <span className="dg-summary">{t.summary}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </>
-      ) : (
-        <p className="dg-none">{live ? 'No tool activity yet.' : 'This session is not running.'}</p>
+      {digest?.lastRequest && (
+        <div className="dg-goal">
+          <span className="dg-goal-label">Working toward</span>
+          <span className="dg-goal-text" title={digest.lastRequest}>{digest.lastRequest}</span>
+        </div>
       )}
 
       {digest && (digest.tools > 0 || digest.edits > 0) && (
@@ -78,25 +60,30 @@ export function NowPanel({ digest, live }: { digest: SessionDigest | null; live:
 }
 
 export function DonePanel({ digest }: { digest: SessionDigest | null }) {
-  const done = digest?.done ?? [];
+  // Ordering is already right from the adapter: a self-reported list keeps the
+  // agent's own order (a narrative), derived milestones come newest-first (a log).
+  const items = digest?.done ?? [];
+
   return (
     <section className="dg dg-done" aria-label="What this session has completed">
       <div className="dg-head">
         <h3>Done so far</h3>
-        {done.length > 0 && <span className="dg-count mono">{done.length}</span>}
+        {items.length > 0 && <span className="dg-count mono">{items.length}</span>}
+        {digest?.reported && <span className="dg-src" title="Maintained by the agent itself">self-reported</span>}
       </div>
 
-      {done.length === 0 ? (
+      {items.length === 0 ? (
         <p className="dg-none">
-          Nothing completed yet. Commits, finished tasks and approved plans show up here.
+          Nothing yet. Agents that keep <code>.fleetview/sessions/&lt;id&gt;.json</code> current
+          list their progress here; otherwise commits and finished tasks appear.
         </p>
       ) : (
         <ul className="dg-list">
-          {done.map((m, i) => (
+          {items.map((m, i) => (
             <li key={i} className={`dg-item dg-${m.kind}`}>
               <span className="dg-kind">{KIND_LABEL[m.kind] ?? m.kind}</span>
-              <span className="dg-text" title={m.text}>{m.text}</span>
-              <span className="dg-when">{ago(m.at)}</span>
+              <span className="dg-text">{m.text}</span>
+              {m.at && <span className="dg-when">{ago(m.at)}</span>}
             </li>
           ))}
         </ul>

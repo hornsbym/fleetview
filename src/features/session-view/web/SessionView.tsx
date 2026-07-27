@@ -12,7 +12,7 @@ import type {
 import './SessionView.css';
 import { linkify } from '../../../ui/FileLink';
 import { Markdown } from '../../../ui/Markdown';
-import { NowPanel, DonePanel } from './SessionDigest';
+
 import { useVisiblePoll } from '../../../ui/useVisiblePoll';
 import type { Session } from '../../../lib/claude-adapter/types';
 
@@ -189,8 +189,6 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
           read-only
         </span>
       </div>
-
-      <NowPanel digest={digest} live={live} />
 
       <div className="oc-transcript" ref={scrollRef} onScroll={onScroll}>
         {items.length === 0 ? (

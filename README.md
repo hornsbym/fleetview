@@ -93,6 +93,17 @@ One caveat: hooks don't run in a folder until you've accepted Claude Code's
 "do you trust this folder?" prompt, so a brand-new repo won't send anything until
 you've answered that once in the terminal.
 
+## Session orientation panels
+Each session page shows **Working on now** (a short prose description of the work in
+flight) and **Done so far** (what the session has accomplished). Agents that keep
+`<repo>/.fleetview/sessions/$CLAUDE_CODE_SESSION_ID.json` current —
+`{ "now": "...", "done": ["..."] }` — drive both directly; see
+`.claude/agents/_shared.md` for the convention. Without it FleetView falls back to
+git commits and completed tasks.
+
+Both survive context compaction: they're derived from the transcript on disk, which
+Claude Code keeps in full even after compacting what the model can see.
+
 ## Plan-gated feature agents (opt-in)
 If a project's agents follow the convention — write `.fleetview/plan.json` in their
 worktree (`{ task, phase, steps }`) — FleetView shows an **approval card** for each

@@ -5,7 +5,7 @@ import { ProjectSwitcher, AddProject } from '../features/projects/web';
 import { projectSlugs } from '../features/projects/shared/slug';
 import { Teammates } from '../features/teammates/web';
 import { TaskBoard } from '../features/task-board/web';
-import { SessionView, DonePanel } from '../features/session-view/web';
+import { SessionView, NowPanel, DonePanel } from '../features/session-view/web';
 import { HookSetup } from '../features/hooks/web';
 import { useVisiblePoll } from '../ui/useVisiblePoll';
 import { usePath, parseRoute, navigate, projectPath, sessionPath } from './router';
@@ -142,6 +142,7 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
           <SessionView session={session} repo={repo} sessionId={sessionId} onDigest={setDigest} />
         </div>
         <div className="sp-agents">
+          <NowPanel digest={digest} live={!!session?.live} />
           <DonePanel digest={digest} />
           <section className="card">
             <div className="col">

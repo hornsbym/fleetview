@@ -196,10 +196,24 @@ export interface TrailItem {
 
 /** A high-level thing the session actually finished. */
 export interface Milestone {
-  /** `commit` is the strongest signal — a verifiable, named unit of work. */
-  kind: 'commit' | 'task' | 'plan' | 'compaction';
+  /** `reported` = the agent said so itself; the rest are derived from the transcript.
+   *  `commit` is the strongest derived signal — verifiable and self-titled. */
+  kind: 'reported' | 'commit' | 'task' | 'plan' | 'compaction';
   text: string;
   at: string | null;
+}
+
+/**
+ * What an agent writes about itself to
+ * `<cwd>/.fleetview/sessions/<CLAUDE_CODE_SESSION_ID>.json`.
+ * Session-level sibling of the per-worktree `.fleetview/plan.json` convention.
+ */
+export interface AgentReport {
+  /** 1-3 sentences on the conceptual work in flight. */
+  now: string | null;
+  /** High-level things finished this session, oldest first. */
+  done: string[];
+  updatedAt: string | null;
 }
 
 /**
@@ -207,7 +221,14 @@ export interface Milestone {
  * compactions — so this survives compaction without a separate store.
  */
 export interface SessionDigest {
-  /** The most recent tool call: what it's doing right now. */
+  /** 1-3 sentences on what's happening — the agent's own words when it reports
+   *  them, else a conceptual description of recent activity. Never a command. */
+  now: string | null;
+  /** True when the agent maintains its own report (see AgentReport). */
+  reported: boolean;
+  reportedAt: string | null;
+  /** The most recent tool call. Kept for the teammates line; the panels don't
+   *  surface raw commands. */
   doing: TrailItem | null;
   /** Recent tool calls, newest first. */
   trail: TrailItem[];

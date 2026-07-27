@@ -217,9 +217,10 @@ kind / status, and the **approval cards** for permissions it asked about. Owns t
 transcript), `digest`, `pending`, and `permission` (the decision). There is **no
 composer** and no start/stop/resume. It never reads `~/.claude` directly.
 
-Also renders **Working on now** (current tool call + trail + the request it's
-serving) and **Done so far** (commits, completed tasks, approved plans). Both come
-from one `SessionDigest`, scanned incrementally from the transcript — see §7.
+Also renders the two orientation panels in the side column — **Working on now**
+(1-3 sentences of prose, never a command) and **Done so far** (a bulleted list) —
+so a human returning to a session can re-enter its context without reading the
+transcript. Both come from one `SessionDigest`; see §7 and §9.
 
 ### hooks — the permission bridge
 Receives Claude Code's native hooks. `POST /api/hooks/permission` parks the
@@ -260,6 +261,16 @@ are parsed (the same trick Claude Code uses for its own job tracking —
 `linkScanOffset` in `~/.claude/jobs/<id>/state.json`). Measured: 20 ms for the
 first full scan of a 2.3 MB transcript, ~1 ms per poll thereafter. Partial trailing
 lines are left for the next pass rather than parsed as garbage.
+
+### Session self-report — the agent's own account
+`<repo>/.fleetview/sessions/<CLAUDE_CODE_SESSION_ID>.json` — `{ now, done[], updatedAt }`.
+When present it is **authoritative**: a sentence the agent wrote about its own
+intent beats anything inferred from which tool happened to run last, the same
+precedence `plan.json`'s `phase` already has. Without it, FleetView falls back to
+git commits and completed tasks, which can only show what a session *did*, not what
+it *meant*. `CLAUDE_CODE_SESSION_ID` is exported to every session and tracks the
+current id (it follows a `/clear` fork), so the filename is always correct.
+Convention documented in `.claude/agents/_shared.md`.
 
 ### Session identity — one id, one alias form
 The canonical id is always the **full session UUID**. Task directories spell it

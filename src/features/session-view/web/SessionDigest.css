@@ -19,28 +19,25 @@
 .dg-none { margin: 0; color: var(--faint); font-size: 12px; }
 
 /* Toward: the request this work is serving. */
+.dg-prose { margin: 0 0 10px; font-size: 13px; line-height: 1.55; color: var(--ink); }
+.dg-src {
+  margin-left: auto; font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+}
 .dg-goal {
-  font-size: 12px; color: var(--dim); margin-bottom: 8px; line-height: 1.45;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: 12px; color: var(--dim); line-height: 1.45;
+  padding-top: 8px; border-top: 1px solid var(--border);
+}
+.dg-goal-text {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 .dg-goal-label {
-  font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
-  color: var(--faint); margin-right: 6px;
+  display: block; font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--faint); margin-bottom: 3px;
 }
 
-/* The current action, then the trail that led to it. */
-.dg-doing { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
-.dg-tool { color: var(--lead); font-size: 11px; flex-shrink: 0; }
-.dg-summary { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dg-when { margin-left: auto; color: var(--faint); font-size: 10px; flex-shrink: 0; }
 
-.dg-trail { list-style: none; margin: 8px 0 0; padding: 0 0 0 2px; border-left: 1px solid var(--border); }
-.dg-trail li {
-  display: flex; align-items: baseline; gap: 8px;
-  padding: 2px 0 2px 10px; font-size: 12px; color: var(--dim);
-}
-.dg-trail .dg-tool { color: var(--faint); }
-.dg-trail .dg-summary { color: var(--dim); }
 
 .dg-counts {
   display: flex; gap: 12px; margin-top: 10px; padding-top: 8px;
@@ -48,8 +45,8 @@
 }
 
 /* Milestones */
-.dg-list { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; }
-.dg-item { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12px; }
+.dg-list { list-style: none; margin: 0; padding: 0; }
+.dg-item { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 12px; }
 .dg-item + .dg-item { border-top: 1px solid var(--border); }
 .dg-kind {
   font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
@@ -59,6 +56,12 @@
 .dg-commit .dg-kind { color: var(--done); border-color: var(--done); }
 .dg-task .dg-kind { color: var(--lead); border-color: var(--lead); }
 .dg-plan .dg-kind { color: var(--attention); border-color: var(--attention); }
-.dg-text { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dg-text { color: var(--ink); line-height: 1.45; }
 /* A compaction is context, not an accomplishment — de-emphasize it. */
 .dg-compaction .dg-text { color: var(--faint); font-style: italic; }
+
+/* Self-reported bullets are prose, so the marker is just a dot. */
+.dg-reported .dg-kind {
+  min-width: 0; border: 0; padding: 0 2px 0 0; color: var(--done); font-size: 12px;
+}
+.dg-none code { font-family: var(--mono); font-size: 10px; color: var(--dim); }

@@ -68,3 +68,30 @@ If any step is high-impact or you're unsure — schema/shared-contract changes, 
 or off-limits edits, dependency/lockfile changes, or anything irreversible — call it out in
 the plan (a short note on the step). The orchestrator auto-approves routine plans but routes
 flagged/substantial ones to the human, so surfacing risk gets you the right level of review.
+
+## Session self-report (orientation for the human)
+
+FleetView shows two panels per session — **Working on now** and **Done so far** —
+so a human returning to a session can re-enter its context without reading the
+whole transcript. Keep them current:
+
+```
+<repo>/.fleetview/sessions/$CLAUDE_CODE_SESSION_ID.json
+```
+```json
+{
+  "now": "1-3 sentences on the conceptual work in flight. No commands, no tool names.",
+  "done": ["High-level thing finished", "Another one"],
+  "updatedAt": "2026-07-27T00:00:00Z"
+}
+```
+
+- `CLAUDE_CODE_SESSION_ID` is exported to every session and tracks the *current*
+  id (it follows a `/clear`), so the filename is always right.
+- Update `now` when you move to a genuinely different piece of work — not per
+  tool call. Describe intent ("Tracking down why the fleet poll stalls the session
+  page"), not mechanics ("Running curl").
+- Append to `done` when something is actually finished, in the order it happened.
+  Keep entries short and human-readable — this is an orientation list, not a log.
+- Without this file FleetView falls back to git commits and completed tasks, which
+  is strictly worse: it can only see what you did, not what you meant.

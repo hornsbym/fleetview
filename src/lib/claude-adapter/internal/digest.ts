@@ -13,9 +13,10 @@
 // keeps a byte cursor and only parses what has been appended since last time.
 // (Claude Code does the same thing for its own job tracking — see the
 // `linkScanOffset` field in ~/.claude/jobs/<id>/state.json.)
-import { open, stat } from 'node:fs/promises';
+import { open, readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
 import { summarizeTool } from './transcripts';
-import type { Milestone, SessionDigest, TrailItem } from '../types';
+import type { AgentReport, Milestone, SessionDigest, TrailItem } from '../types';
 
 /** How many recent tool calls to keep for the activity trail. */
 const TRAIL_MAX = 8;
@@ -137,14 +138,68 @@ function ingest(c: Cursor, line: string) {
 }
 
 /**
+ * The agent's own account of what it's doing and what it has finished.
+ *
+ * Extends the existing `.fleetview/plan.json` self-report convention to the
+ * session level. The agent writes `<cwd>/.fleetview/sessions/<sessionId>.json`,
+ * where the id comes from `CLAUDE_CODE_SESSION_ID` — verified to be exported to
+ * every session and to track the *current* id (it follows a `/clear` fork).
+ *
+ * When present this is authoritative: a sentence the agent wrote about its own
+ * intent beats anything inferred from which tool happened to run last. Same
+ * precedence rule `plan.json`'s `phase` already has over harness-derived state.
+ */
+async function readReport(cwd: string | null, sessionId: string): Promise<AgentReport | null> {
+  if (!cwd || !sessionId) return null;
+  const p = path.join(cwd, '.fleetview', 'sessions', `${sessionId}.json`);
+  try {
+    const raw = JSON.parse(await readFile(p, 'utf8'));
+    const done = Array.isArray(raw?.done)
+      ? raw.done.filter((d: unknown) => typeof d === 'string' && d.trim()).map((d: string) => d.trim())
+      : [];
+    const now = typeof raw?.now === 'string' ? raw.now.trim() : '';
+    if (!now && !done.length) return null;
+    return { now: now || null, done, updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null };
+  } catch {
+    return null;
+  }
+}
+
+/** Conceptual description of recent activity — no tool names, no commands. */
+function describeActivity(trail: TrailItem[]): string | null {
+  if (!trail.length) return null;
+  const kind = (name: string): string => {
+    if (name === 'Edit' || name === 'Write' || name === 'NotebookEdit') return 'editing files';
+    if (name === 'Read' || name === 'Grep' || name === 'Glob') return 'reading through the codebase';
+    if (name === 'Agent' || name === 'Task') return 'coordinating subagents';
+    if (name.startsWith('mcp__')) return 'working with an external tool';
+    if (name === 'Bash') return 'running commands';
+    return 'working';
+  };
+  const counts = new Map<string, number>();
+  for (const t of trail) counts.set(kind(t.name), (counts.get(kind(t.name)) ?? 0) + 1);
+  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return top ? `Recently ${top}.` : null;
+}
+
+/**
  * Read (or incrementally update) a session's digest.
  *
  * Never throws — an unreadable or unparseable transcript yields an empty digest,
  * matching the rest of the adapter's defensive posture.
  */
-export async function readDigest(transcriptPath: string | null): Promise<SessionDigest> {
+export async function readDigest(
+  transcriptPath: string | null,
+  opts: { cwd?: string | null; sessionId?: string } = {},
+): Promise<SessionDigest> {
+  const report = await readReport(opts.cwd ?? null, opts.sessionId ?? '');
   const empty: SessionDigest = {
-    doing: null, trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastRequest: null,
+    now: report?.now ?? null,
+    reported: !!report,
+    reportedAt: report?.updatedAt ?? null,
+    doing: null, trail: [],
+    done: (report?.done ?? []).map(text => ({ kind: 'reported' as const, text, at: null })),
+    compactions: 0, edits: 0, tools: 0, lastRequest: null,
   };
   if (!transcriptPath) return empty;
 
@@ -177,10 +232,21 @@ export async function readDigest(transcriptPath: string | null): Promise<Session
   }
 
   const trail = [...c.trail].reverse();       // newest first
+  const derived = [...c.done].reverse();      // newest first
+
   return {
+    // The agent's own sentence wins; otherwise say what it's conceptually doing
+    // rather than naming the tool — a command string is not an explanation.
+    now: report?.now ?? describeActivity(trail),
+    reported: !!report,
+    reportedAt: report?.updatedAt ?? null,
     doing: trail[0] ?? null,
     trail,
-    done: [...c.done].reverse(),              // newest first
+    // Agent-maintained list is authoritative; derived milestones are the fallback
+    // so a session that never adopts the convention still shows something real.
+    done: report?.done.length
+      ? report.done.map(text => ({ kind: 'reported' as const, text, at: null }))
+      : derived,
     compactions: c.compactions,
     edits: c.edits,
     tools: c.tools,
