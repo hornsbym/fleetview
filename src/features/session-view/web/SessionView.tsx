@@ -52,13 +52,18 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
 
   const live = !!session?.live;
 
-  // Transcript: seed once, then tail while the session is live.
+  // Transcript: seed as soon as we know the session id.
+  //
+  // Deliberately NOT dependent on `live`. It used to be, which meant the effect
+  // re-ran the moment the fleet poll resolved and flipped live false->true —
+  // clearing the transcript it had just loaded and showing "Loading transcript…"
+  // a second time. The history endpoint needs only the id, so this can start
+  // immediately and in parallel with the fleet.
   useEffect(() => {
     if (!sessionId) return;
     let alive = true;
     setItems([]); setLoaded(false); decidedRef.current = new Set();
-
-    const load = async () => {
+    void (async () => {
       try {
         const h: HistoryResponse = await (
           await fetch(`/api/session/history?sessionId=${encodeURIComponent(sessionId)}`)
@@ -66,11 +71,23 @@ export function SessionView({ session, repo, sessionId }: SessionViewProps) {
         if (alive && h.ok && h.items) setItems(h.items);
       } catch { /* leave what we have */ }
       finally { if (alive) setLoaded(true); }
-    };
+    })();
+    return () => { alive = false; };
+  }, [sessionId]);
 
-    void load();
-    if (!live) return () => { alive = false; };
-    const id = setInterval(load, TAIL_MS);
+  // Tail only while live. Separate effect so starting/stopping the poll never
+  // resets what's already on screen.
+  useEffect(() => {
+    if (!sessionId || !live) return;
+    let alive = true;
+    const id = setInterval(async () => {
+      try {
+        const h: HistoryResponse = await (
+          await fetch(`/api/session/history?sessionId=${encodeURIComponent(sessionId)}`)
+        ).json();
+        if (alive && h.ok && h.items) setItems(h.items);
+      } catch { /* keep last known */ }
+    }, TAIL_MS);
     return () => { alive = false; clearInterval(id); };
   }, [sessionId, live]);
 

@@ -182,8 +182,8 @@ export async function buildFleet(config: FleetConfig = {}, pending?: PendingSnap
   // --- 2. On-disk sessions for every repo we care about (watched + wherever
   //        something is live right now).
   const repos = new Set<string>([...(config.repos ?? []), ...live.map(l => l.cwd)]);
-  const known: KnownSession[] = [];
-  for (const repo of repos) known.push(...await knownSessions(repo));
+  // Repos are independent; scanning them serially cost the sum rather than the max.
+  const known: KnownSession[] = (await Promise.all([...repos].map(r => knownSessions(r)))).flat();
 
   // Canonical id universe, used to resolve truncated `session-<8hex>` task dirs.
   const allIds = new Set<string>([...live.map(l => l.sessionId), ...known.map(k => k.sessionId)]);

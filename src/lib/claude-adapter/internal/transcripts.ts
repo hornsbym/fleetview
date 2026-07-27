@@ -2,7 +2,7 @@
 // in FleetView — the format is internal to CC and can change between releases.
 // It is deliberately isolated here and parses defensively; on an unrecognized
 // shape it returns nulls rather than throwing, so features degrade gracefully.
-import { open } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import type { PlanItem } from '../types';
 
 const TAIL = 96 * 1024;
@@ -52,11 +52,27 @@ export interface Activity {
   plan: PlanItem[] | null;
 }
 
+// Parsed activity, keyed by path and invalidated by (mtime, size).
+//
+// The fleet poll reads ~100 transcripts every 2.5s — one per session plus one per
+// subagent — at a 96 KiB tail each, which is ~9 MB of reads and JSON parsing per
+// poll. The overwhelming majority belong to sessions that ended hours ago and will
+// never change again. A stat is far cheaper than a tail+parse, so check it first
+// and only re-read when the file actually moved.
+const activityCache = new Map<string, { mtimeMs: number; size: number; value: Activity }>();
+const NOTHING: Activity = { action: null, at: null, plan: null };
+
 /** Tail a transcript for the latest tool action and latest plan checklist. */
 export async function readActivity(tp: string | null): Promise<Activity> {
-  if (!tp) return { action: null, at: null, plan: null };
+  if (!tp) return NOTHING;
+
+  let mtimeMs = 0, size = 0;
+  try { ({ mtimeMs, size } = await stat(tp)); } catch { return NOTHING; }
+  const hit = activityCache.get(tp);
+  if (hit && hit.mtimeMs === mtimeMs && hit.size === size) return hit.value;
+
   let text: string;
-  try { text = await readTail(tp); } catch { return { action: null, at: null, plan: null }; }
+  try { text = await readTail(tp); } catch { return NOTHING; }
   const lines = text.split('\n');
   let action: string | null = null;
   let at: string | null = null;
@@ -74,7 +90,9 @@ export async function readActivity(tp: string | null): Promise<Activity> {
       }
     }
   }
-  return { action, at, plan };
+  const value: Activity = { action, at, plan };
+  activityCache.set(tp, { mtimeMs, size, value });
+  return value;
 }
 
 /** Read the cwd recorded in a transcript (first entry carrying one). */
