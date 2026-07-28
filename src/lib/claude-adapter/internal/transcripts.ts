@@ -105,3 +105,25 @@ export async function transcriptCwd(tp: string | null): Promise<string | null> {
   } catch { /* ignore */ }
   return null;
 }
+
+/** Extract the model from a transcript. Cached once found — it never changes. */
+const modelCache = new Map<string, string>();
+export async function readModel(tp: string | null): Promise<string | null> {
+  if (!tp) return null;
+  const hit = modelCache.get(tp);
+  if (hit) return hit;
+
+  let model: string | null = null;
+  try {
+    for (const line of (await readHead(tp, 32768)).split('\n')) {
+      if (!line) continue;
+      try {
+        const o = JSON.parse(line);
+        if (o?.model && typeof o.model === 'string') { model = o.model; break; }
+        if (o?.type === 'assistant' && o?.message?.model) { model = o.message.model; break; }
+      } catch { /* skip */ }
+    }
+  } catch { /* ignore */ }
+  if (model) modelCache.set(tp, model);
+  return model;
+}

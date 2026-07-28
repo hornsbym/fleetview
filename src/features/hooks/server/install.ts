@@ -29,6 +29,15 @@ const EVENT_HOOKS = [
   'TaskCreated', 'TaskCompleted', 'WorktreeCreate', 'WorktreeRemove',
 ];
 
+/** The UserPromptSubmit hook command that captures terminal identity and posts
+ *  it to FleetView. Runs in the session's shell, so it can read env vars the
+ *  HTTP hook transport can't (TERM_PROGRAM, TERM_SESSION_ID, etc.). */
+function terminalIdentityCommand(port: number): string {
+  // Uses env vars for terminal identity and CLAUDE_CODE_SESSION_ID for the
+  // session link. The command must be a single shell expression.
+  return `curl -sS -X POST http://127.0.0.1:${port}/api/hooks/terminal-identity -H 'Content-Type: application/json' -d "{\\"session_id\\":\\"$CLAUDE_CODE_SESSION_ID\\",\\"term_program\\":\\"$TERM_PROGRAM\\",\\"term_session_id\\":\\"$TERM_SESSION_ID\\",\\"iterm_session_id\\":\\"$ITERM_SESSION_ID\\",\\"tty\\":\\"$(tty 2>/dev/null)\\"}" >/dev/null 2>&1 || true`;
+}
+
 function block(port: number) {
   const permission = {
     matcher: '',
@@ -38,7 +47,14 @@ function block(port: number) {
     matcher: '',
     hooks: [{ type: 'http', url: `http://127.0.0.1:${port}/api/hooks/event?event=${name}`, [MARK]: true }],
   });
-  const hooks: Record<string, unknown[]> = { PermissionRequest: [permission] };
+  const terminalIdentity = {
+    matcher: '',
+    hooks: [{ type: 'command', command: terminalIdentityCommand(port), [MARK]: true }],
+  };
+  const hooks: Record<string, unknown[]> = {
+    PermissionRequest: [permission],
+    UserPromptSubmit: [terminalIdentity],
+  };
   for (const e of EVENT_HOOKS) hooks[e] = [event(e)];
   return hooks;
 }

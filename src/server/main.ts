@@ -9,6 +9,7 @@ import { readFleet, claudeVersion } from '../lib/claude-adapter/index';
 import { handleConfigRoute, readConfig } from '../features/projects/server';
 import { handleSessionRoute } from '../features/session-view/server';
 import { handleHooksRoute } from '../features/hooks/server';
+import { handleTerminalFocusRoute } from '../features/terminal-focus/server';
 import { pendingSnapshot, releaseAll } from './bus';
 import { handleOpenRoute } from './open';
 
@@ -40,6 +41,7 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === '/api/health') return send(res, 200, JSON.stringify({ ok: true, claude: claudeVersion() }));
     if (await handleConfigRoute(req, res)) return;
+    if (await handleTerminalFocusRoute(req, res)) return;
     if (await handleSessionRoute(req, res)) return;
     if (await handleHooksRoute(req, res)) return;
     if (await handleOpenRoute(req, res)) return;

@@ -40,12 +40,10 @@ export function NowPanel({ digest, live, status, waitingFor }: {
   status?: string | null;
   waitingFor?: string | null;
 }) {
-  // An idle session is not working, whatever it last wrote about itself. A
-  // self-reported sentence goes stale the moment the agent stops, and showing
-  // "Tracking down a bug…" for a session that finished ten minutes ago is worse
-  // than saying nothing — so liveness overrides the report here.
   const working = live && status !== 'idle' && status !== 'waiting';
   const blocked = live && status === 'waiting';
+
+  if (!working && !blocked) return null;
 
   return (
     <section className="dg dg-now" aria-label="What this agent is working on now">
@@ -59,11 +57,9 @@ export function NowPanel({ digest, live, status, waitingFor }: {
 
       {blocked
         ? <p className="dg-prose dg-blocked">Waiting on you{waitingFor ? ` — ${waitingFor}` : ''}.</p>
-        : !working
-          ? <p className="dg-idle">Not currently working on anything.</p>
-          : digest?.now
-            ? <p className="dg-prose">{digest.now}</p>
-            : <p className="dg-none">Nothing reported yet.</p>}
+        : digest?.now
+          ? <p className="dg-prose">{digest.now}</p>
+          : <p className="dg-none">Nothing reported yet.</p>}
 
       {digest?.lastRequest && (
         <div className="dg-goal">
