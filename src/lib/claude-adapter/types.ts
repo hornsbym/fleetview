@@ -102,6 +102,8 @@ export interface Session {
   needsApproval: boolean;
   /** How many are parked (not just whether any are). */
   pendingApprovals: number;
+  /** True when at least one parked request is an AskUserQuestion. */
+  hasQuestion: boolean;
   cwd: string | null;
   leadSessionId: string | null;
   /** Human-readable session name, when known. */
@@ -153,6 +155,8 @@ export interface PendingSnapshot {
    * when it matters most.
    */
   cwdBySession?: Record<string, string>;
+  /** Sessions that have at least one parked AskUserQuestion. */
+  hasQuestionBySession?: Record<string, boolean>;
 }
 
 // --- Permissions: answering a question the session asked (hook bridge) ---

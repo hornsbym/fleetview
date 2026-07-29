@@ -326,6 +326,7 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
       attached: d.live,
       needsApproval: false,
       pendingApprovals: 0,
+      hasQuestion: false,
       cwd: d.cwd,
       leadSessionId: d.id,
       name: d.name,
