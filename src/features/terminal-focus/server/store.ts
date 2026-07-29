@@ -1,8 +1,11 @@
 // In-memory store for terminal identity metadata, keyed by session id.
 // Populated via the UserPromptSubmit hook; consumed by the focus endpoint.
 //
-// This is ephemeral — terminal identity is only useful while the session is
-// alive, and re-captured on every prompt submit, so persistence is unnecessary.
+// Persisted to disk so identities survive server restarts (tsx watch).
+
+import { readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 export interface TerminalIdentity {
   sessionId: string;
@@ -14,10 +17,27 @@ export interface TerminalIdentity {
   capturedAt: string;
 }
 
-const store = new Map<string, TerminalIdentity>();
+const PERSIST_PATH = path.join(tmpdir(), 'fleetview-terminal-identities.json');
+
+function loadFromDisk(): [string, TerminalIdentity][] {
+  try {
+    const data = JSON.parse(readFileSync(PERSIST_PATH, 'utf8'));
+    if (Array.isArray(data)) return data;
+  } catch { /* first run or corrupt file */ }
+  return [];
+}
+
+function saveToDisk() {
+  try {
+    writeFileSync(PERSIST_PATH, JSON.stringify([...store.entries()]), 'utf8');
+  } catch { /* best effort */ }
+}
+
+const store = new Map<string, TerminalIdentity>(loadFromDisk());
 
 export function setTerminalIdentity(id: TerminalIdentity): void {
   store.set(id.sessionId, id);
+  saveToDisk();
 }
 
 export function getTerminalIdentity(sessionId: string): TerminalIdentity | null {
