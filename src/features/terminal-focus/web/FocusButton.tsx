@@ -46,15 +46,20 @@ export function FocusButton({ sessionId, live, cwd }: Props) {
     setTimeout(() => setState('idle'), 2000);
   }, [sessionId]);
 
-  if (!live || hasIdentity === false) return null;
+  if (!live) return null;
+
+  const disabled = hasIdentity === false || state === 'loading';
+  const title = hasIdentity === false
+    ? 'No terminal identity captured yet. Send a prompt in the terminal to enable focus.'
+    : 'Bring the terminal running this session to the foreground';
 
   return (
     <button
       type="button"
-      className={`focus-btn focus-${state}`}
+      className={`focus-btn focus-${state}${hasIdentity === false ? ' focus-disabled' : ''}`}
       onClick={focus}
-      disabled={state === 'loading'}
-      title="Bring the terminal running this session to the foreground"
+      disabled={disabled}
+      title={title}
     >
       {state === 'success' ? 'Focused' : state === 'unavailable' ? 'Not found' : 'Focus terminal'}
     </button>
