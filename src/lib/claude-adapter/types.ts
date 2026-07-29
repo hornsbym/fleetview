@@ -276,4 +276,6 @@ export type ChatItem =
   | { kind: 'user'; text: string; at?: string }
   | { kind: 'assistant'; text: string; at?: string }
   | { kind: 'tool'; name: string; summary: string; at?: string }
-  | { kind: 'result'; tokens?: number; at?: string };
+  | { kind: 'result'; tokens?: number; at?: string }
+  | { kind: 'notification'; text: string; at?: string }
+  | { kind: 'plan'; text: string; path: string; at?: string };

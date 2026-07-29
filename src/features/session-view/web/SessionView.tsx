@@ -280,6 +280,24 @@ function TranscriptItem({ item, repo }: { item: ChatItem; repo: string }) {
       return <div className="oc-tool">⚙ {item.name}{item.summary && <span className="oc-tool-arg mono">: {linkify(item.summary, repo)}</span>}</div>;
     case 'result':
       return <div className="oc-result">✓ done{item.tokens != null ? ` · ${item.tokens.toLocaleString()} tok` : ''}</div>;
+    case 'notification':
+      return (
+        <div className="oc-notification">
+          <span className="oc-notif-icon">⚡</span>
+          <span>{item.text}</span>
+        </div>
+      );
+    case 'plan':
+      return (
+        <details className="oc-plan-card" open>
+          <summary className="oc-plan-header">
+            Plan: {item.path.split('/').pop()}
+          </summary>
+          <div className="oc-plan-body">
+            <Markdown text={item.text} repo={repo} />
+          </div>
+        </details>
+      );
     default:
       return null;
   }
