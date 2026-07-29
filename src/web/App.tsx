@@ -7,7 +7,7 @@ import { Teammates } from '../features/teammates/web';
 import { TaskBoard } from '../features/task-board/web';
 import { SessionView, NowPanel, DonePanel } from '../features/session-view/web';
 import { HookSetup } from '../features/hooks/web';
-import { ThemeToggle } from '../ui/ThemeToggle';
+import { ThemeToggle } from '../features/theme/web/ThemeToggle';
 import { useVisiblePoll } from '../ui/useVisiblePoll';
 import { usePath, parseRoute, navigate, projectPath, sessionPath } from './router';
 import './SessionNav.css';

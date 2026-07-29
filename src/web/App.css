@@ -100,22 +100,3 @@
 .task-row .o { margin-left: auto; font-size: 10px; color: var(--faint); }
 .none { color: var(--faint); font-size: 12px; }
 
-/* Theme toggle button */
-.theme-toggle {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: none;
-  border: none;
-  color: var(--dim);
-  font: inherit;
-  font-size: 12px;
-  padding: 6px 8px;
-  cursor: pointer;
-  border-radius: 4px;
-  margin-top: 8px;
-}
-.theme-toggle:hover {
-  background: var(--panel2);
-  color: var(--ink);
-}

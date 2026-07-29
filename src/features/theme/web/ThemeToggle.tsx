@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import './Theme.css';
 
 type Theme = 'auto' | 'light' | 'dark';
 const STORAGE_KEY = 'fleetview-theme';
