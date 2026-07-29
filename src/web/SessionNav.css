@@ -56,23 +56,65 @@
 .snav-item.flagged {
   border: 1px solid var(--attention);
 }
+.snav-item.has-question {
+  border: 1px solid var(--lead);
+}
+.snav-item.unread {
+  border-left: 2px solid var(--done);
+}
+.snav-item.flagged.unread {
+  border-left: 2px solid var(--attention);
+}
+.snav-item.has-question.unread {
+  border-left: 2px solid var(--lead);
+}
 
-.snav-dot {
+/* Session indicators */
+.snav-ind {
   flex: none;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.snav-ind-idle {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
-  background: var(--faint);
-}
-.snav-dot.snav-busy {
   background: var(--done);
-  animation: pulse 1.6s infinite;
+  animation: pulse-slow 3s infinite;
 }
-.snav-dot.snav-idle {
-  background: var(--dim);
+
+.snav-ind-working {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: var(--done);
+  border-radius: 50%;
+  animation: spin 1.2s linear infinite;
 }
-.snav-dot.snav-waiting {
-  background: var(--attention);
+
+.snav-ind-permission {
+  color: var(--attention);
+  background: none;
+}
+
+.snav-ind-question {
+  color: var(--lead);
+  background: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .snav-name {
@@ -81,11 +123,4 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.snav-badge {
-  flex: none;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--attention);
 }

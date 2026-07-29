@@ -120,12 +120,14 @@ export function pendingPermissions(sessionId?: string): PermissionRequest[] {
 export function pendingSnapshot(): PendingSnapshot {
   const pendingBySession: Record<string, number> = {};
   const cwdBySession: Record<string, string> = {};
+  const hasQuestionBySession: Record<string, boolean> = {};
   for (const p of parked.values()) {
     const k = groupOf(p.req);
     pendingBySession[k] = (pendingBySession[k] ?? 0) + 1;
     if (p.req.cwd) cwdBySession[k] = p.req.cwd;
+    if (p.req.toolName === 'AskUserQuestion') hasQuestionBySession[k] = true;
   }
-  return { pendingBySession, cwdBySession };
+  return { pendingBySession, cwdBySession, hasQuestionBySession };
 }
 
 /** Release everything on shutdown so no terminal session is left blocked. */
