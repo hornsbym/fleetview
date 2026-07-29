@@ -103,9 +103,12 @@ async function focusAppleTerminal(id: TerminalIdentity): Promise<FocusResult> {
 async function focusVSCode(id: TerminalIdentity, cwd?: string | null): Promise<FocusResult> {
   // `code` CLI with a folder path focuses the window that already has that folder
   // open, which gets us to the right VS Code window among multiple instances.
+  // Then focus the integrated terminal panel where Claude Code is running.
   if (cwd) {
     try {
       await pexec('code', [cwd], { timeout: 5000 });
+      // Focus the terminal panel within the activated window.
+      try { await pexec('code', ['--command', 'workbench.action.terminal.focus'], { timeout: 3000 }); } catch { /* best effort */ }
       return { ok: true, method: 'vscode-folder' };
     } catch { /* fall through to generic activate */ }
   }
@@ -117,6 +120,7 @@ async function focusVSCode(id: TerminalIdentity, cwd?: string | null): Promise<F
   `;
   try {
     await pexec('osascript', ['-e', script], { timeout: 5000 });
+    try { await pexec('code', ['--command', 'workbench.action.terminal.focus'], { timeout: 3000 }); } catch { /* best effort */ }
     return { ok: true, method: 'vscode-activate' };
   } catch (e: any) {
     return { ok: false, method: 'vscode-activate', reason: e?.message || 'osascript-failed' };

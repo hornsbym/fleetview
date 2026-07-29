@@ -247,6 +247,9 @@ function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearComplete
                       tabIndex={-1}
                       onClick={(e) => {
                         e.stopPropagation();
+                        if (done) clearCompleted(s.id);
+                        readRef.current.add(s.id);
+                        navigate(sessionPath(slug, s.id));
                         void fetch('/api/session/focus', {
                           method: 'POST',
                           headers: { 'content-type': 'application/json' },
@@ -255,7 +258,7 @@ function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearComplete
                       }}
                       title="Focus terminal"
                     >
-                      ⌗
+                      →
                     </span>
                   )}
                 </button>
