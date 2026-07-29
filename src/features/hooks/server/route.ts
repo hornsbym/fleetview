@@ -16,7 +16,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { resolveParentSession, type PermissionDecision, type PermissionRequest } from '../../../lib/claude-adapter/index';
-import { park, publish, settlerFor } from '../../../server/bus';
+import { cancelPermission, park, publish, settlerFor } from '../../../server/bus';
 import { hookStatus, installHooks, uninstallHooks } from './install';
 
 /** The port we're actually serving on — the installed hook URL must match it. */
@@ -67,7 +67,7 @@ const json = (res: ServerResponse, body: unknown, code = 200) => {
  * does nothing" bug. Writing an `addRules`/`localSettings` update instead
  * produced `{"permissions":{"allow":["Write"]}}` on disk.
  */
-function decisionBody(req: PermissionRequest, decision: PermissionDecision | 'timeout') {
+function decisionBody(req: PermissionRequest, decision: PermissionDecision | 'timeout', extra?: { updatedInput?: unknown }) {
   if (decision === 'timeout') {
     // No opinion: fall through to the terminal's own prompt.
     return {};
@@ -80,7 +80,7 @@ function decisionBody(req: PermissionRequest, decision: PermissionDecision | 'ti
       },
     };
   }
-  const d: Record<string, unknown> = { behavior: 'allow', updatedInput: req.input };
+  const d: Record<string, unknown> = { behavior: 'allow', updatedInput: extra?.updatedInput ?? req.input };
   if (decision === 'always') {
     d.updatedPermissions = [{
       type: 'addRules',
@@ -140,7 +140,7 @@ export async function handleHooksRoute(req: IncomingMessage, res: ServerResponse
 
       const settle = settlerFor(res, (d) => decisionBody(request, d));
       // If the terminal gives up first, stop holding a card the user can't action.
-      res.on('close', () => { if (!res.writableEnded) settle('timeout'); });
+      res.on('close', () => { cancelPermission(request.requestId); });
       park(request, settle, timeoutMs);
       return true; // response deliberately left open
     }
