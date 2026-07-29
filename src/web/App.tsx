@@ -157,6 +157,7 @@ function SessionTile({ slug, s, completed, clearCompleted }: { slug: string; s: 
       {s.name && <div className="tile-name">{s.name}</div>}
       <div className="tile-uuid mono">{s.id}</div>
       {s.waitingFor && <div className="tile-waiting">waiting · {s.waitingFor}</div>}
+      {s.gitBranch && <div className="tile-branch mono">⎇ {s.gitBranch}</div>}
     </button>
   );
 }

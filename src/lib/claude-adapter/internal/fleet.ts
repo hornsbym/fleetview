@@ -69,19 +69,24 @@ async function transcriptPath(sessionId: string, cwd: string | null): Promise<st
   return null;
 }
 
-async function worktreeAgents(repoCwd: string): Promise<Record<string, string>> {
-  const map: Record<string, string> = {};
+interface WorktreeInfo { path: string; branch: string | null; }
+
+async function worktreeAgents(repoCwd: string): Promise<Record<string, WorktreeInfo>> {
+  const map: Record<string, WorktreeInfo> = {};
   try {
     const { stdout } = await pexec('git', ['-C', repoCwd, 'worktree', 'list', '--porcelain'], { maxBuffer: 1 << 20 });
-    for (const line of stdout.split('\n')) {
-      const m = line.match(/^worktree (.*\/\.claude\/worktrees\/agent-([0-9a-f]+))\s*$/);
-      if (m) map[m[2]] = m[1];
+    const blocks = stdout.split('\n\n');
+    for (const block of blocks) {
+      const wtMatch = block.match(/^worktree (.*\/\.claude\/worktrees\/agent-([0-9a-f]+))\s*$/m);
+      if (!wtMatch) continue;
+      const branchMatch = block.match(/^branch refs\/heads\/(.+)$/m);
+      map[wtMatch[2]] = { path: wtMatch[1], branch: branchMatch ? branchMatch[1] : null };
     }
   } catch { /* not a git repo / no worktrees */ }
   return map;
 }
 
-type WorktreeCache = (repoCwd: string) => Promise<Record<string, string>>;
+type WorktreeCache = (repoCwd: string) => Promise<Record<string, WorktreeInfo>>;
 
 /**
  * Memoize `git worktree list` per repo for the lifetime of ONE buildFleet call.
@@ -92,7 +97,7 @@ type WorktreeCache = (repoCwd: string) => Promise<Record<string, string>>;
  * Sessions in a repo share one worktree list, so one spawn per repo is enough.
  */
 function worktreeCache(): WorktreeCache {
-  const cache = new Map<string, Promise<Record<string, string>>>();
+  const cache = new Map<string, Promise<Record<string, WorktreeInfo>>>();
   return (repoCwd: string) => {
     let hit = cache.get(repoCwd);
     if (!hit) cache.set(repoCwd, hit = worktreeAgents(repoCwd));
@@ -102,7 +107,7 @@ function worktreeCache(): WorktreeCache {
 
 function newTeammate(partial: Partial<Teammate> & Pick<Teammate, 'agentId' | 'name' | 'agentType' | 'isLead'>): Teammate {
   return {
-    cwd: null, worktree: null, task: null, action: null, actionAt: null,
+    cwd: null, worktree: null, branch: null, task: null, action: null, actionAt: null,
     plan: null, hasTranscript: false, stale: false, finished: null, ...partial,
   };
 }
@@ -153,8 +158,9 @@ async function discoverSubagents(
       agentType: meta.agentType || `agent-${id.slice(0, 8)}`,
       desc: meta.description || '',
       isLead: false,
-      cwd: wt[id] || null,
-      worktree: wt[id] || null,
+      cwd: wt[id]?.path || null,
+      worktree: wt[id]?.path || null,
+      branch: wt[id]?.branch || null,
       action: a.action, actionAt: a.at, plan: a.plan,
       model,
       hasTranscript: true,
@@ -283,6 +289,20 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
       members.unshift(newTeammate({
         agentId: 'lead', name: d.name || 'session', agentType: 'orchestrator', isLead: true, cwd: d.cwd,
       }));
+    }
+
+    // Fallback: promote the lead's TodoWrite plan items to session tasks when the
+    // disk-based task board is empty. This surfaces progress even when no explicit
+    // tasks/ dir exists (common for terminal-started sessions).
+    if (d.tasks.length === 0) {
+      const lead = members.find(m => m.isLead);
+      if (lead?.plan?.length) {
+        d.tasks = lead.plan.map((p, i) => ({
+          id: String(i + 1),
+          subject: p.content,
+          status: p.status === 'completed' ? 'completed' as const : p.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+        }));
+      }
     }
 
     const ownedBy = (m: Teammate) => d.tasks.filter(t => t.owner === m.name || t.owner === m.agentType);

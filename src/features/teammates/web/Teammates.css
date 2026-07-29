@@ -90,6 +90,8 @@
   text-overflow: ellipsis;
 }
 
+.tm-branch { font-size: 11px; color: var(--lead); }
+
 /* Task / brief / empty line. */
 .tm-task { margin: 8px 0 0; font-size: 13px; color: var(--ink); }
 .tm-none {

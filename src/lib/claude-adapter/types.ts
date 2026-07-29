@@ -36,6 +36,7 @@ export interface Teammate {
   isLead: boolean;
   cwd: string | null;
   worktree: string | null;
+  branch: string | null;
   desc?: string;
   model?: string | null;
   /** Self-reported lifecycle phase (M6); present only for plan-gated agents. */

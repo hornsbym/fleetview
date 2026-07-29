@@ -99,6 +99,11 @@ export function TeammateRow({ m, onApprove, onRequestChanges, approvable = true 
             ⌥ {worktreeLabel(m.worktree)}
           </span>
         )}
+        {m.branch && (
+          <span className="tm-branch mono" title={`Branch: ${m.branch}`}>
+            ⎇ {m.branch}
+          </span>
+        )}
       </header>
 
       {taskText ? (
