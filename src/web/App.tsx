@@ -157,8 +157,27 @@ function SessionTile({ slug, s, completed, clearCompleted }: { slug: string; s: 
       {s.name && <div className="tile-name">{s.name}</div>}
       <div className="tile-uuid mono">{s.id}</div>
       {s.waitingFor && <div className="tile-waiting">waiting · {s.waitingFor}</div>}
+      {s.gitBranch && <div className="tile-branch mono">⎇ {s.gitBranch}</div>}
     </button>
   );
+}
+
+type IndicatorState = 'idle' | 'working' | 'permission' | 'question';
+
+function indicatorOf(s: Session): IndicatorState {
+  if (s.hasQuestion) return 'question';
+  if (s.needsApproval) return 'permission';
+  if (s.status === 'busy') return 'working';
+  return 'idle';
+}
+
+function SessionIndicator({ state }: { state: IndicatorState }) {
+  switch (state) {
+    case 'question': return <span className="snav-ind snav-ind-question">?</span>;
+    case 'permission': return <span className="snav-ind snav-ind-permission">!</span>;
+    case 'working': return <span className="snav-ind snav-ind-working" />;
+    case 'idle': default: return <span className="snav-ind snav-ind-idle" />;
+  }
 }
 
 function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearCompleted }: {
@@ -168,6 +187,14 @@ function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearComplete
   completed: Set<string>;
   clearCompleted: (id: string) => void;
 }) {
+  // Track which sessions the user has viewed (mark as "read").
+  const readRef = useRef<Set<string>>(new Set());
+
+  // Mark the active session as read whenever it changes.
+  useEffect(() => {
+    if (activeSessionId) readRef.current.add(activeSessionId);
+  }, [activeSessionId]);
+
   const groups = useMemo(() => {
     const out: { project: Project; slug: string; sessions: Session[] }[] = [];
     for (const p of fleet.projects) {
@@ -196,14 +223,19 @@ function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearComplete
             {sessions.map(s => {
               const active = s.id === activeSessionId;
               const done = completed.has(s.id);
+              const unread = !readRef.current.has(s.id) && !active;
               return (
                 <button
                   key={s.id}
                   type="button"
-                  className={'snav-item' + (active ? ' sel' : '') + (done ? ' done' : '') + (s.needsApproval ? ' flagged' : '')}
-                  onClick={() => { if (done) clearCompleted(s.id); navigate(sessionPath(slug, s.id)); }}
+                  className={'snav-item'
+                    + (active ? ' sel' : '')
+                    + (done ? ' done' : '')
+                    + (s.hasQuestion ? ' has-question' : s.needsApproval ? ' flagged' : '')
+                    + (unread ? ' unread' : '')}
+                  onClick={() => { if (done) clearCompleted(s.id); readRef.current.add(s.id); navigate(sessionPath(slug, s.id)); }}
                 >
-                  <span className={`snav-dot snav-${s.status || 'live'}`} />
+                  <SessionIndicator state={indicatorOf(s)} />
                   <span className="snav-name">{s.name || s.id}</span>
                   {s.needsApproval && <span className="snav-badge">!</span>}
                   {s.live && (

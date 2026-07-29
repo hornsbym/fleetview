@@ -181,10 +181,18 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
   }, []);
 
-  const decide = useCallback((req: PermissionRequest, decision: PermissionDecision) => {
+  const [staleNotice, setStaleNotice] = useState<string | null>(null);
+
+  const decide = useCallback(async (req: PermissionRequest, decision: PermissionDecision, updatedInput?: unknown) => {
     decidedRef.current.add(req.requestId);
     setPending(p => p.filter(x => x.requestId !== req.requestId));
-    void postJson<OkResponse>('/api/session/permission', { requestId: req.requestId, decision });
+    const body: any = { requestId: req.requestId, decision };
+    if (updatedInput) body.updatedInput = updatedInput;
+    const result = await postJson<OkResponse>('/api/session/permission', body);
+    if (result && !result.ok) {
+      setStaleNotice('Already resolved in terminal');
+      setTimeout(() => setStaleNotice(null), 3000);
+    }
   }, []);
 
   const label = session?.name || sessionId;
@@ -219,6 +227,7 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
         )}
       </div>
 
+      {staleNotice && <div className="oc-stale-notice">{staleNotice}</div>}
       {pending.length > 0 && (
         <div className="oc-perms">
           {pending.map(req => <PermissionCard key={req.requestId} req={req} repo={repo} onDecide={decide} />)}
@@ -231,8 +240,11 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
 function PermissionCard({ req, repo, onDecide }: {
   req: PermissionRequest;
   repo: string;
-  onDecide: (req: PermissionRequest, d: PermissionDecision) => void;
+  onDecide: (req: PermissionRequest, d: PermissionDecision, updatedInput?: unknown) => void;
 }) {
+  if (req.toolName === 'AskUserQuestion') return <QuestionCard req={req} onAnswer={onDecide} />;
+  if (req.toolName === 'ExitPlanMode') return <PlanApprovalCard req={req} onDecide={onDecide} />;
+
   const detail = toolSummary(req.input);
   // agentId === null means the session's lead asked; anything else is a teammate.
   const who = req.agentId ? (req.agentType || req.agentId) : 'lead';
@@ -249,6 +261,79 @@ function PermissionCard({ req, repo, onDecide }: {
         <button type="button" className="oc-btn oc-primary" onClick={() => onDecide(req, 'allow')}>Approve</button>
         <button type="button" className="oc-btn" onClick={() => onDecide(req, 'always')}>Always allow</button>
         <button type="button" className="oc-btn oc-danger" onClick={() => onDecide(req, 'deny')}>Deny</button>
+      </div>
+    </div>
+  );
+}
+
+function QuestionCard({ req, onAnswer }: { req: PermissionRequest; onAnswer: (req: PermissionRequest, d: PermissionDecision, updatedInput?: unknown) => void }) {
+  const input = req.input as { questions?: Array<{ question: string; header: string; options: Array<{label: string; description: string}>; multiSelect: boolean }> };
+  const questions = input?.questions ?? [];
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [customText, setCustomText] = useState('');
+
+  const submit = () => {
+    const finalAnswers = { ...answers };
+    // If there's custom text and a question without an answer, use it
+    for (const q of questions) {
+      if (!finalAnswers[q.question] && customText) finalAnswers[q.question] = customText;
+    }
+    onAnswer(req, 'allow', { ...input, answers: finalAnswers });
+  };
+
+  return (
+    <div className="oc-question">
+      <div className="oc-question-badge">?</div>
+      {questions.map((q, qi) => (
+        <div key={qi} className="oc-question-block">
+          {q.header && <div className="oc-question-header">{q.header}</div>}
+          <div className="oc-question-text">{q.question}</div>
+          <div className="oc-options">
+            {q.options.map((opt, oi) => (
+              <button
+                key={oi}
+                type="button"
+                className={'oc-option' + (answers[q.question] === opt.label ? ' selected' : '')}
+                onClick={() => {
+                  setAnswers(a => ({ ...a, [q.question]: opt.label }));
+                  if (!q.multiSelect && questions.length === 1) {
+                    // Auto-submit for single-select single-question
+                    onAnswer(req, 'allow', { ...input, answers: { ...answers, [q.question]: opt.label } });
+                  }
+                }}
+              >
+                <span className="oc-option-label">{opt.label}</span>
+                {opt.description && <span className="oc-option-desc">{opt.description}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="oc-answer-row">
+        <input
+          type="text"
+          className="oc-answer-input"
+          placeholder="Or type a custom answer..."
+          value={customText}
+          onChange={e => setCustomText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && customText) submit(); }}
+        />
+        {(questions.length > 1 || questions[0]?.multiSelect) && (
+          <button type="button" className="oc-btn oc-primary" onClick={submit}>Submit</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanApprovalCard({ req, onDecide }: { req: PermissionRequest; onDecide: (req: PermissionRequest, d: PermissionDecision) => void }) {
+  return (
+    <div className="oc-plan-approval">
+      <div className="oc-plan-approval-badge">📋</div>
+      <div className="oc-plan-approval-text">Plan ready for review</div>
+      <div className="oc-perm-actions">
+        <button type="button" className="oc-btn oc-primary" onClick={() => onDecide(req, 'allow')}>Approve plan</button>
+        <button type="button" className="oc-btn oc-danger" onClick={() => onDecide(req, 'deny')}>Reject</button>
       </div>
     </div>
   );
@@ -280,6 +365,24 @@ function TranscriptItem({ item, repo }: { item: ChatItem; repo: string }) {
       return <div className="oc-tool">⚙ {item.name}{item.summary && <span className="oc-tool-arg mono">: {linkify(item.summary, repo)}</span>}</div>;
     case 'result':
       return <div className="oc-result">✓ done{item.tokens != null ? ` · ${item.tokens.toLocaleString()} tok` : ''}</div>;
+    case 'notification':
+      return (
+        <div className="oc-notification">
+          <span className="oc-notif-icon">⚡</span>
+          <span>{item.text}</span>
+        </div>
+      );
+    case 'plan':
+      return (
+        <details className="oc-plan-card" open>
+          <summary className="oc-plan-header">
+            Plan: {item.path.split('/').pop()}
+          </summary>
+          <div className="oc-plan-body">
+            <Markdown text={item.text} repo={repo} />
+          </div>
+        </details>
+      );
     default:
       return null;
   }

@@ -23,10 +23,14 @@ export interface HookStatus {
   error?: string;
 }
 
-/** Fire-and-forget activity events. Push replaces polling for these. */
+/** Fire-and-forget activity events. Push replaces polling for these.
+ *  NOTE: WorktreeCreate/WorktreeRemove are CALLBACK hooks (Claude Code expects
+ *  a worktreePath in the response), not fire-and-forget. Registering them here
+ *  broke worktree creation by returning `{}`. FleetView discovers worktrees via
+ *  `git worktree list --porcelain` instead. */
 const EVENT_HOOKS = [
   'Notification', 'SubagentStart', 'SubagentStop',
-  'TaskCreated', 'TaskCompleted', 'WorktreeCreate', 'WorktreeRemove',
+  'TaskCreated', 'TaskCompleted',
 ];
 
 /** The UserPromptSubmit hook command that captures terminal identity and posts

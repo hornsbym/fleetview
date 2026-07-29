@@ -278,6 +278,41 @@
   color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
 }
 
+/* Notifications: task-notification summaries, stripped from raw XML. */
+.oc-notification {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dim);
+  padding: 4px 12px;
+  font-style: italic;
+}
+.oc-notif-icon { flex: none; }
+
+/* Plan cards: inline render of ~/.claude/plans/*.md written by the agent. */
+.oc-plan-card {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.oc-plan-header {
+  padding: 8px 12px;
+  background: var(--panel2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--ink);
+}
+.oc-plan-header:hover { background: var(--border); }
+.oc-plan-body {
+  padding: 12px;
+  font-size: 13px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 /* Markdown inside assistant bubbles. Scoped to .md so it can't leak into tool
    lines or user text. The bubble sets `white-space: pre-wrap` for plain text —
    Markdown blocks manage their own whitespace, so reset it here. */
@@ -318,3 +353,27 @@
 .md table { border-collapse: collapse; margin: 0 0 8px; display: block; overflow-x: auto; max-width: 100%; }
 .md th, .md td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; font-size: 12px; }
 .md th { background: var(--panel2); font-weight: 600; }
+
+/* QuestionCard */
+.oc-question { padding: 12px; border: 1px solid var(--border); border-left: 3px solid var(--lead); border-radius: var(--radius); margin: 8px 0; }
+.oc-question-badge { font-size: 18px; font-weight: 700; color: var(--lead); margin-bottom: 8px; }
+.oc-question-block { margin-bottom: 12px; }
+.oc-question-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--dim); margin-bottom: 4px; }
+.oc-question-text { font-size: 14px; color: var(--ink); margin-bottom: 8px; }
+.oc-options { display: flex; flex-direction: column; gap: 6px; }
+.oc-option { display: flex; flex-direction: column; gap: 2px; text-align: left; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+.oc-option:hover { border-color: var(--lead); }
+.oc-option.selected { border-color: var(--lead); background: color-mix(in srgb, var(--lead) 10%, var(--panel2)); }
+.oc-option-label { font-size: 13px; font-weight: 500; color: var(--ink); }
+.oc-option-desc { font-size: 12px; color: var(--dim); }
+.oc-answer-row { display: flex; gap: 8px; margin-top: 8px; }
+.oc-answer-input { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--ink); font: inherit; font-size: 13px; }
+.oc-answer-input:focus { outline: none; border-color: var(--lead); }
+
+/* PlanApprovalCard */
+.oc-plan-approval { padding: 12px; border: 1px solid var(--border); border-left: 3px solid var(--lead); border-radius: var(--radius); margin: 8px 0; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.oc-plan-approval-badge { font-size: 20px; }
+.oc-plan-approval-text { flex: 1; font-size: 14px; font-weight: 500; color: var(--ink); }
+
+/* Stale notice */
+.oc-stale-notice { font-size: 12px; color: var(--dim); font-style: italic; padding: 4px 12px; }

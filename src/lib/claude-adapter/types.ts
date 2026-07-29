@@ -36,6 +36,7 @@ export interface Teammate {
   isLead: boolean;
   cwd: string | null;
   worktree: string | null;
+  branch: string | null;
   desc?: string;
   model?: string | null;
   /** Self-reported lifecycle phase (M6); present only for plan-gated agents. */
@@ -102,6 +103,8 @@ export interface Session {
   needsApproval: boolean;
   /** How many are parked (not just whether any are). */
   pendingApprovals: number;
+  /** True when at least one parked request is an AskUserQuestion. */
+  hasQuestion: boolean;
   cwd: string | null;
   leadSessionId: string | null;
   /** Human-readable session name, when known. */
@@ -153,6 +156,8 @@ export interface PendingSnapshot {
    * when it matters most.
    */
   cwdBySession?: Record<string, string>;
+  /** Sessions that have at least one parked AskUserQuestion. */
+  hasQuestionBySession?: Record<string, boolean>;
 }
 
 // --- Permissions: answering a question the session asked (hook bridge) ---
@@ -276,4 +281,6 @@ export type ChatItem =
   | { kind: 'user'; text: string; at?: string }
   | { kind: 'assistant'; text: string; at?: string }
   | { kind: 'tool'; name: string; summary: string; at?: string }
-  | { kind: 'result'; tokens?: number; at?: string };
+  | { kind: 'result'; tokens?: number; at?: string }
+  | { kind: 'notification'; text: string; at?: string }
+  | { kind: 'plan'; text: string; path: string; at?: string };
