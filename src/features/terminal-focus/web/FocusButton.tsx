@@ -16,7 +16,7 @@ export function FocusButton({ sessionId, live, cwd }: Props) {
   useEffect(() => {
     if (!live) { setHasIdentity(false); return; }
     let alive = true;
-    void (async () => {
+    const check = async () => {
       try {
         const res = await fetch(`/api/session/terminal?sessionId=${encodeURIComponent(sessionId)}`);
         const data = await res.json();
@@ -24,8 +24,10 @@ export function FocusButton({ sessionId, live, cwd }: Props) {
       } catch {
         if (alive) setHasIdentity(false);
       }
-    })();
-    return () => { alive = false; };
+    };
+    void check();
+    const id = setInterval(check, 5000);
+    return () => { alive = false; clearInterval(id); };
   }, [sessionId, live]);
 
   const focus = useCallback(async () => {

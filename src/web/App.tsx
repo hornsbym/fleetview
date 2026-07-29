@@ -206,6 +206,24 @@ function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearComplete
                   <span className={`snav-dot snav-${s.status || 'live'}`} />
                   <span className="snav-name">{s.name || s.id}</span>
                   {s.needsApproval && <span className="snav-badge">!</span>}
+                  {s.live && (
+                    <span
+                      className="snav-focus"
+                      role="button"
+                      tabIndex={-1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void fetch('/api/session/focus', {
+                          method: 'POST',
+                          headers: { 'content-type': 'application/json' },
+                          body: JSON.stringify({ sessionId: s.id, cwd: s.cwd }),
+                        });
+                      }}
+                      title="Focus terminal"
+                    >
+                      ⌗
+                    </span>
+                  )}
                 </button>
               );
             })}

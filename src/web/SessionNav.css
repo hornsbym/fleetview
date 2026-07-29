@@ -89,3 +89,21 @@
   font-weight: 700;
   color: var(--attention);
 }
+
+.snav-focus {
+  flex: none;
+  opacity: 0;
+  font-size: 11px;
+  color: var(--dim);
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.snav-item:hover .snav-focus {
+  opacity: 1;
+}
+.snav-focus:hover {
+  color: var(--lead);
+  background: var(--panel);
+}
