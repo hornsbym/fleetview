@@ -58,7 +58,7 @@ export function subscribe(sessionId: string, cb: (e: SeqEvent) => void): () => v
 interface Parked {
   req: PermissionRequest;
   /** Writes the decision as the hook's HTTP response body and ends it. */
-  settle: (decision: PermissionDecision | 'timeout') => void;
+  settle: (decision: PermissionDecision | 'timeout', extra?: { updatedInput?: unknown }) => void;
   timer: NodeJS.Timeout;
 }
 
@@ -75,7 +75,7 @@ const parked = new Map<string, Parked>();
  */
 export function park(
   req: PermissionRequest,
-  settle: (decision: PermissionDecision | 'timeout') => void,
+  settle: (decision: PermissionDecision | 'timeout', extra?: { updatedInput?: unknown }) => void,
   timeoutMs: number,
 ): void {
   const timer = setTimeout(() => {
@@ -98,14 +98,25 @@ function groupOf(req: PermissionRequest): string {
   return req.parentSessionId || req.sessionId;
 }
 
-export function resolvePermission(requestId: string, decision: PermissionDecision): boolean {
+export function resolvePermission(requestId: string, decision: PermissionDecision, extra?: { updatedInput?: unknown }): boolean {
   const p = parked.get(requestId);
   if (!p) return false;
   parked.delete(requestId);
   clearTimeout(p.timer);
-  p.settle(decision);
+  p.settle(decision, extra);
   publish(groupOf(p.req), {
     kind: 'permission_resolved', sessionId: groupOf(p.req), permission: p.req, decision,
+  });
+  return true;
+}
+
+export function cancelPermission(requestId: string): boolean {
+  const p = parked.get(requestId);
+  if (!p) return false;
+  parked.delete(requestId);
+  clearTimeout(p.timer);
+  publish(groupOf(p.req), {
+    kind: 'permission_resolved', sessionId: groupOf(p.req), permission: p.req,
   });
   return true;
 }
@@ -141,12 +152,12 @@ export function releaseAll(): void {
 
 /** Bind a held ServerResponse to a parked request. Exported so the hooks route
  *  keeps all of its HTTP-shaped concerns in one place. */
-export function settlerFor(res: ServerResponse, body: (d: PermissionDecision | 'timeout') => unknown) {
+export function settlerFor(res: ServerResponse, body: (d: PermissionDecision | 'timeout', extra?: { updatedInput?: unknown }) => unknown) {
   let done = false;
-  return (decision: PermissionDecision | 'timeout') => {
+  return (decision: PermissionDecision | 'timeout', extra?: { updatedInput?: unknown }) => {
     if (done || res.writableEnded) return;
     done = true;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(body(decision)));
+    res.end(JSON.stringify(body(decision, extra)));
   };
 }

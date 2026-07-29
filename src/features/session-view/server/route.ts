@@ -112,8 +112,9 @@ export async function handleSessionRoute(req: IncomingMessage, res: ServerRespon
         json(res, { ok: false, reason: 'bad-request' });
         return true;
       }
-      const ok = resolvePermission(body.requestId, decision);
-      json(res, { ok, ...(ok ? {} : { reason: 'unknown-request' }) });
+      const { requestId, updatedInput } = body;
+      const resolved = resolvePermission(requestId, decision, updatedInput ? { updatedInput } : undefined);
+      json(res, { ok: resolved, ...(resolved ? {} : { reason: 'unknown-request' }) });
       return true;
     }
 
