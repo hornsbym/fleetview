@@ -142,8 +142,17 @@ async function discoverSubagents(
   const dir = path.join(PROJECTS, encodeCwd(repoCwd), sessionId, 'subagents');
   let files: string[]; try { files = (await readdir(dir)).filter(f => /^agent-.*\.jsonl$/.test(f)); } catch { return []; }
   const wt = await worktrees(repoCwd);
-  // Which spawns have returned. Absence means still running — idle or busy.
-  const returned = await completedToolUses(parentTranscript);
+  // Which spawns have returned from the SESSION lead. Absence means still running.
+  const returnedFromSession = await completedToolUses(parentTranscript);
+  // Depth-2+ agents return to their parent agent, not the session — cache per parent.
+  const returnedFromAgent = new Map<string, Set<string>>();
+  async function returnedFrom(parentAgentId: string): Promise<Set<string>> {
+    let s = returnedFromAgent.get(parentAgentId);
+    if (s) return s;
+    s = await completedToolUses(path.join(dir, `agent-${parentAgentId}.jsonl`));
+    returnedFromAgent.set(parentAgentId, s);
+    return s;
+  }
   const out: Teammate[] = [];
   for (const f of files) {
     const id = f.replace(/^agent-/, '').replace(/\.jsonl$/, '');
@@ -152,6 +161,9 @@ async function discoverSubagents(
     const meta = await readMeta(path.join(dir, `agent-${id}.meta.json`));
     const a = await readActivity(full);
     const model = await readModel(full);
+    const returned = meta.parentAgentId
+      ? await returnedFrom(meta.parentAgentId)
+      : returnedFromSession;
     const t = newTeammate({
       agentId: id,
       name: meta.name || meta.agentType || `agent-${id.slice(0, 8)}`,
