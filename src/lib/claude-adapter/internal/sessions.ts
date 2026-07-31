@@ -7,8 +7,8 @@
 //   2. The SDK's `listSessions({ dir })` — every session on disk for a repo,
 //      live or past.
 //
-// Neither depends on `~/.claude/tasks` or `~/.claude/teams`, which is why this
-// module — not those directories — is the primary discovery path.
+// Neither depends on `~/.claude/teams`, which is why this module — not that
+// directory — is the primary discovery path.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readdir, stat } from 'node:fs/promises';
