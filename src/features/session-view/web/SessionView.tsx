@@ -66,7 +66,7 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
   const [loaded, setLoaded] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const stickRef = useRef(true);
-  // Requests decided in this tab, so a poll in flight can't resurrect the card.
+  // Requests resolved (locally or externally), so a poll in flight can't resurrect the card.
   const decidedRef = useRef<Set<string>>(new Set());
 
   const live = !!session?.live;
@@ -157,6 +157,7 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
         setPending(prev => (prev.some(x => x.requestId === p.requestId) ? prev : [...prev, p]));
       } else if (e.kind === 'permission_resolved' && e.permission) {
         const p = e.permission;
+        decidedRef.current.add(p.requestId);
         setPending(prev => prev.filter(x => x.requestId !== p.requestId));
       }
     };
