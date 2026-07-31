@@ -231,11 +231,22 @@ export async function resolveParentSession(cwd: string, agentId: string): Promis
       .filter(d => d.isDirectory()).map(d => d.name);
   } catch { return null; }
 
+  const target = `agent-${agentId}.jsonl`;
   for (const sid of candidates) {
-    try {
-      await stat(path.join(projectDir, sid, 'subagents', `agent-${agentId}.jsonl`));
-      return sid;
-    } catch { /* not this one */ }
+    const subagentsDir = path.join(projectDir, sid, 'subagents');
+    if (await findFileRecursive(subagentsDir, target)) return sid;
   }
   return null;
+}
+
+async function findFileRecursive(dir: string, filename: string): Promise<boolean> {
+  let entries;
+  try { entries = await readdir(dir, { withFileTypes: true }); } catch { return false; }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name === filename) return true;
+    if (entry.isDirectory()) {
+      if (await findFileRecursive(path.join(dir, entry.name), filename)) return true;
+    }
+  }
+  return false;
 }
