@@ -18,6 +18,8 @@ import { SessionEnvironmentPanel } from './SessionEnvironment';
 import { useVisiblePoll } from '../../../ui/useVisiblePoll';
 import { FocusButton } from '../../terminal-focus/web';
 import type { Session } from '../../../lib/claude-adapter/types';
+import { Teammates } from '../../teammates/web/Teammates';
+import { rosterOf } from '../../teammates/shared/roster';
 
 export interface SessionViewProps {
   /** The resolved session — the fleet already knows liveness, so don't re-derive it. */
@@ -215,6 +217,10 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
       </div>
 
       <SessionEnvironmentPanel session={session} sessionId={sessionId} />
+
+      {session?.members && rosterOf(session.members, { live }).active.filter(m => !m.isLead).length > 0 && (
+        <Teammates members={session.members} session={{ live }} />
+      )}
 
       <div className="oc-transcript" ref={scrollRef} onScroll={onScroll}>
         {items.length === 0 ? (
