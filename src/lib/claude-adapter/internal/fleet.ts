@@ -1,18 +1,16 @@
 // Monitor-plane assembly. FleetView observes Claude Code sessions; it never owns
 // one, so discovery must not depend on ownership.
 //
-// Discovery order (this is the important change from v1):
+// Discovery order:
 //   1. `claude agents --json`  -> every LIVE session, with real liveness.
 //   2. SDK listSessions(dir)   -> every session on disk for a watched repo.
-//   3. ~/.claude/{tasks,teams} -> ENRICHMENT ONLY (task boards, team rosters).
-//
-// v1 discovered from (3) alone, which made terminal-started sessions invisible:
-// a session with neither a tasks/ nor a teams/ dir produced no tile at all.
+//   3. ~/.claude/teams          -> ENRICHMENT ONLY (team rosters).
+//   4. Transcripts (TodoWrite) -> task board derived from the lead's plan checklist.
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { HOME, TASKS, TEAMS, PROJECTS, encodeCwd } from './paths';
+import { HOME, TEAMS, PROJECTS, encodeCwd } from './paths';
 import { readActivity, readModel, transcriptCwd } from './transcripts';
 import { liveSessions, knownSessions, canonicalSessionId } from './sessions';
 import { completedToolUses } from './digest';
@@ -40,13 +38,6 @@ async function readMeta(p: string): Promise<any> {
 async function listDirs(p: string): Promise<string[]> {
   try { return (await readdir(p, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => d.name); }
   catch { return []; }
-}
-
-async function loadTasks(dir: string): Promise<Task[]> {
-  let files: string[]; try { files = await readdir(dir); } catch { return []; }
-  const tasks: Task[] = [];
-  for (const f of files) if (/^\d+\.json$/.test(f)) { const t = await readJson(path.join(dir, f)); if (t) tasks.push(t); }
-  return tasks.sort((a, b) => Number(a.id) - Number(b.id));
 }
 
 async function loadLiveTeams(): Promise<Record<string, any>> {
@@ -250,17 +241,10 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
     if (k.lastModified && (!d.lastActiveAt || k.lastModified > d.lastActiveAt)) d.lastActiveAt = k.lastModified;
   }
 
-  // --- 3. Enrichment from ~/.claude/{tasks,teams}. These no longer create tiles on
+  // --- 3. Enrichment from ~/.claude/teams. These no longer create tiles on
   //        their own unless they resolve to a real session — an unresolvable
   //        `session-<8hex>` dir is an orphan (transcript cleaned up) and is dropped.
   const teams = await loadLiveTeams();
-  for (const dir of await listDirs(TASKS)) {
-    const id = canonicalSessionId(dir, allIds);
-    if (!id) continue;
-    const d = get(id);
-    d.tasks = await loadTasks(path.join(TASKS, dir));
-    d.team ||= teams[dir] || null;
-  }
   for (const [name, team] of Object.entries<any>(teams)) {
     const id = canonicalSessionId(name, allIds);
     if (!id) continue;
@@ -303,35 +287,32 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
       }));
     }
 
-    // Fallback: promote the lead's TodoWrite plan items to session tasks when the
-    // disk-based task board is empty. This surfaces progress even when no explicit
-    // tasks/ dir exists (common for terminal-started sessions).
-    if (d.tasks.length === 0) {
-      const lead = members.find(m => m.isLead);
-      if (lead?.plan?.length) {
-        d.tasks = lead.plan.map((p, i) => ({
-          id: String(i + 1),
-          subject: p.content,
-          status: p.status === 'completed' ? 'completed' as const : p.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
-        }));
-      }
+    // Read the lead's transcript first — this populates plan from TodoWrite.
+    const lead = members.find(m => m.isLead)!;
+    const tp = await transcriptPath(d.id, d.cwd);
+    if (tp) {
+      const a = await readActivity(tp);
+      lead.action = a.action; lead.actionAt = a.at; lead.hasTranscript = true;
+      if (a.plan) lead.plan = a.plan;
+      lead.model = await readModel(tp);
+    }
+
+    // Promote the lead's TodoWrite plan items to session tasks.
+    if (d.tasks.length === 0 && lead.plan?.length) {
+      d.tasks = lead.plan.map((p, i) => ({
+        id: String(i + 1),
+        subject: p.content,
+        status: p.status === 'completed' ? 'completed' as const : p.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+      }));
     }
 
     const ownedBy = (m: Teammate) => d.tasks.filter(t => t.owner === m.name || t.owner === m.agentType);
     for (const m of members) {
+      if (m.isLead) continue;
       const ip = d.tasks.find(t => t.status === 'in_progress' && (t.owner === m.name || t.owner === m.agentType));
       m.task = ip ? { subject: ip.subject, activeForm: ip.activeForm } : null;
       const owned = ownedBy(m);
       if (owned.length) m.plan = owned.map(t => ({ content: t.subject, status: t.status }));
-      if (m.isLead) {
-        const tp = await transcriptPath(d.id, d.cwd);
-        if (tp) {
-          const a = await readActivity(tp);
-          m.action = a.action; m.actionAt = a.at; m.hasTranscript = true;
-          if (a.plan) m.plan = a.plan;
-          m.model = await readModel(tp);
-        }
-      }
     }
 
     // Subagent discovery is gated on cwd alone — NOT on liveness. A session that

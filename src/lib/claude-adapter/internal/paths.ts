@@ -5,7 +5,6 @@ import path from 'node:path';
 
 export const HOME = homedir();
 export const CLAUDE = path.join(HOME, '.claude');
-export const TASKS = path.join(CLAUDE, 'tasks');
 export const TEAMS = path.join(CLAUDE, 'teams');
 export const PROJECTS = path.join(CLAUDE, 'projects');
 
