@@ -43,6 +43,7 @@
 .tile-uuid { margin-top: 4px; font-size: 11px; color: var(--faint); }
 .tile-waiting { margin-top: 6px; font-size: 11px; color: var(--active); }
 .tile-branch { font-size: 11px; color: var(--lead); margin-top: 2px; }
+.tile-worktree { font-size: 11px; color: var(--dim); margin-top: 2px; }
 
 .chip { font-size: 11px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--dim); }
 .chip.a { color: var(--active); border-color: #5a4415; }

@@ -150,6 +150,44 @@ and render a small collapsible panel on the session page.
 `BackgroundCommandCompleted` would make this real-time and robust. Worth a
 feature request at https://github.com/anthropics/claude-code/issues.
 
+## Focus the exact terminal tab, not just the window (Terminal focus)
+
+Focus is tab-accurate for two of the four emulators: iTerm2 matches on session id
+and Apple Terminal on tty (`focus.ts`). **VS Code can only raise the window** — if
+several sessions share one window you land in the right window and still have to
+find the tab yourself.
+
+**Constraint:** the VS Code CLI exposes nothing for terminals. `code --help` offers
+`--goto` (files), `--reuse-window`, `--status` and `--locate-shell-integration-path`,
+and there is no `--command`. Two calls to a non-existent
+`code --command workbench.action.terminal.focus` were removed — they had been
+failing silently inside a best-effort `catch`, so the terminal panel was never
+focused even when it looked like it was. No built-in `vscode://` handler covers
+terminals either.
+
+**Implementation path:** a small VS Code extension is the only reliable route.
+It registers a URI handler (or a localhost endpoint), then
+
+```js
+for (const t of vscode.window.terminals)
+  if (await t.processId === pid) { t.show(); break }
+```
+
+The match key is already reachable: `ps -o ppid= -p $CLAUDE_PID` is the integrated
+terminal's shell, which is exactly what `Terminal.processId` returns — verified.
+Capturing it is a one-line addition to the existing `UserPromptSubmit` hook, and
+`TerminalIdentity.pid` already exists in the store, hardcoded `null` at
+`terminal-focus/server/route.ts`.
+
+**Caveats:**
+- Every FleetView user would have to install the extension — a real adoption cost
+  for a convenience feature. Probably only worth it if running several sessions
+  per window is common.
+- Accessibility automation (`osascript` + System Events keystrokes) was considered
+  and rejected: it needs Accessibility permission granted to the server process,
+  and even then it can only toggle *a* terminal panel — there is no way to tell
+  which tab hosts a given session. That drops the half of the problem worth solving.
+
 ## Multi-machine / remote (speculative)
 
 Everything is `127.0.0.1`. Watching sessions on another machine would need an
