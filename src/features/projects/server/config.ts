@@ -74,6 +74,7 @@ From now on in this session, maintain \`.fleetview/sessions/$CLAUDE_CODE_SESSION
 
 Update the file:
 - **\`now\`**: Every time you start a new piece of work (not every tool call — when you shift focus). One sentence describing what you're actively doing, written for a human scanning a dashboard.
+- **\`goal\`**: The high-level objective this session is working toward. Update when the user gives you a new task or shifts direction. One sentence a colleague would understand without context.
 - **\`summary\`**: Whenever you complete something significant (a fix, a feature, a refactor). 1-5 sentences covering everything this session has accomplished so far.
 - **\`updatedAt\`**: ISO 8601 timestamp of this update.
 
@@ -82,6 +83,7 @@ The file schema:
 \`\`\`json
 {
   "now": "Brief, human-readable description of current activity.",
+  "goal": "The high-level objective this work is serving.",
   "summary": "Cumulative summary of what this session has accomplished.",
   "updatedAt": "ISO 8601 timestamp"
 }

@@ -38,10 +38,10 @@ export function NowPanel({ digest, live, status, waitingFor }: {
           ? <p className="dg-prose">{digest.now}</p>
           : <p className="dg-none">Nothing reported yet.</p>}
 
-      {digest?.lastRequest && (
+      {(digest?.goal || digest?.lastRequest) && (
         <div className="dg-goal">
           <span className="dg-goal-label">Working toward</span>
-          <span className="dg-goal-text" title={digest.lastRequest}>{digest.lastRequest}</span>
+          <span className="dg-goal-text" title={digest.goal || digest.lastRequest || ''}>{digest.goal || digest.lastRequest}</span>
         </div>
       )}
 

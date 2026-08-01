@@ -233,6 +233,8 @@ export interface Milestone {
 export interface AgentReport {
   /** 1-3 sentences on the conceptual work in flight. */
   now: string | null;
+  /** One-liner: the high-level objective this work is serving. */
+  goal: string | null;
   /** 1-5 sentence summary of what this session has accomplished. */
   summary: string | null;
   /** High-level things finished this session, oldest first. */
@@ -263,7 +265,9 @@ export interface SessionDigest {
   compactions: number;
   edits: number;
   tools: number;
-  /** The last real user prompt — what it's currently working toward. */
+  /** Agent-authored goal or the last real user prompt — what it's working toward. */
+  goal: string | null;
+  /** The last real user prompt (fallback when no agent-authored goal exists). */
   lastRequest: string | null;
 }
 

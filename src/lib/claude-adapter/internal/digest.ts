@@ -179,9 +179,10 @@ async function readReport(cwd: string | null, sessionId: string): Promise<AgentR
       ? raw.done.filter((d: unknown) => typeof d === 'string' && d.trim()).map((d: string) => d.trim())
       : [];
     const now = typeof raw?.now === 'string' ? raw.now.trim() : '';
+    const goal = typeof raw?.goal === 'string' ? raw.goal.trim() : '';
     const summary = typeof raw?.summary === 'string' ? raw.summary.trim() : '';
-    if (!now && !done.length && !summary) return null;
-    return { now: now || null, summary: summary || null, done, updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null };
+    if (!now && !done.length && !summary && !goal) return null;
+    return { now: now || null, goal: goal || null, summary: summary || null, done, updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null };
   } catch {
     return null;
   }
@@ -350,7 +351,7 @@ export async function readDigest(
     reportedAt: report?.updatedAt ?? null,
     doing: null, trail: [],
     done: (report?.done ?? []).map(text => ({ kind: 'reported' as const, text, at: null })),
-    compactions: 0, edits: 0, tools: 0, lastRequest: null,
+    compactions: 0, edits: 0, tools: 0, goal: report?.goal ?? null, lastRequest: null,
   };
   if (!transcriptPath) return empty;
   const c = await scan(transcriptPath);
@@ -376,6 +377,7 @@ export async function readDigest(
     compactions: c.compactions,
     edits: c.edits,
     tools: c.tools,
+    goal: report?.goal ?? null,
     lastRequest: c.lastUser,
   };
 }
