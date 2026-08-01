@@ -29,12 +29,10 @@ function uniqueStrings(arr: unknown): string[] {
 function normalize(input: unknown): FleetViewConfig {
   const obj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   const repos = uniqueStrings(obj.repos);
-  const enabledRepos = uniqueStrings(obj.enabledRepos);
   const editor = cleanStr(obj.editor);
   const host = cleanStr(obj.host);
   return {
     repos,
-    ...(enabledRepos.length ? { enabledRepos } : {}),
     ...(editor ? { editor } : {}),
     ...(host ? { host } : {}),
   };
@@ -65,21 +63,28 @@ export async function removeRepo(repoPath: string): Promise<FleetViewConfig> {
   return writeConfig({ ...config, repos: config.repos.filter((r) => r !== target) });
 }
 
-// --- FleetView session reporting opt-in ---
+// --- FleetView skill installation ---
 
-const FLEETVIEW_BLOCK_START = '<!-- fleetview:start -->';
-const FLEETVIEW_BLOCK_END = '<!-- fleetview:end -->';
+const SKILL_DIR = path.join(homedir(), '.claude', 'commands');
+const SKILL_PATH = path.join(SKILL_DIR, 'fleetview.md');
 
-const FLEETVIEW_INSTRUCTION = `${FLEETVIEW_BLOCK_START}
-# FleetView session reporting
+const FLEETVIEW_SKILL = `# /fleetview — Enable FleetView session reporting
 
-When you complete something significant (a fix, a feature, a refactor — not every small step), update \`.fleetview/sessions/$CLAUDE_CODE_SESSION_ID.json\` in the project root with a brief summary of what this session has accomplished so far.
+From now on in this session, maintain \`.fleetview/sessions/$CLAUDE_CODE_SESSION_ID.json\` in the project root to keep FleetView informed of your progress.
+
+Update the file:
+- **\`now\`**: Every time you start a new piece of work (not every tool call — when you shift focus). One sentence describing what you're actively doing, written for a human scanning a dashboard.
+- **\`goal\`**: The high-level objective this session is working toward. Update when the user gives you a new task or shifts direction. One sentence a colleague would understand without context.
+- **\`summary\`**: Whenever you complete something significant (a fix, a feature, a refactor). 1-5 sentences covering everything this session has accomplished so far.
+- **\`updatedAt\`**: ISO 8601 timestamp of this update.
 
 The file schema:
 
 \`\`\`json
 {
-  "summary": "1-5 sentences describing what this session has accomplished.",
+  "now": "Brief, human-readable description of current activity.",
+  "goal": "The high-level objective this work is serving.",
+  "summary": "Cumulative summary of what this session has accomplished.",
   "updatedAt": "ISO 8601 timestamp"
 }
 \`\`\`
@@ -87,54 +92,24 @@ The file schema:
 Rules:
 - Create the \`.fleetview/sessions/\` directory if it doesn't exist.
 - Overwrite the file each time — it's the current state, not a log.
-- Keep the summary concise and focused on outcomes, not process.
-- The \`summary\` field is cumulative — it covers everything accomplished in this session, not just the latest change.
+- Write \`now\` in plain language a colleague would understand at a glance (e.g. "Refactoring the auth middleware to use the new token format" not "Edit auth.ts").
+- Keep \`summary\` concise and focused on outcomes, not process.
 - This is purely for visualization — it does not affect your work.
-${FLEETVIEW_BLOCK_END}`;
 
-async function injectClaudeMd(repoPath: string): Promise<void> {
-  const claudeDir = path.join(repoPath, '.claude');
-  const claudeMd = path.join(claudeDir, 'CLAUDE.md');
-  await mkdir(claudeDir, { recursive: true });
-  let content = '';
-  try { content = await readFile(claudeMd, 'utf8'); } catch { /* new file */ }
-  if (content.includes(FLEETVIEW_BLOCK_START)) return;
-  const sep = content.length > 0 && !content.endsWith('\n') ? '\n\n' : content.length > 0 ? '\n' : '';
-  await writeFile(claudeMd, content + sep + FLEETVIEW_INSTRUCTION + '\n', 'utf8');
+Acknowledge with: "FleetView reporting enabled for this session."
+`;
+
+export async function installSkill(): Promise<void> {
+  await mkdir(SKILL_DIR, { recursive: true });
+  await writeFile(SKILL_PATH, FLEETVIEW_SKILL, 'utf8');
 }
 
-async function removeClaudeMd(repoPath: string): Promise<void> {
-  const claudeMd = path.join(repoPath, '.claude', 'CLAUDE.md');
-  let content: string;
-  try { content = await readFile(claudeMd, 'utf8'); } catch { return; }
-  const start = content.indexOf(FLEETVIEW_BLOCK_START);
-  const end = content.indexOf(FLEETVIEW_BLOCK_END);
-  if (start === -1 || end === -1) return;
-  const before = content.slice(0, start).replace(/\n+$/, '');
-  const after = content.slice(end + FLEETVIEW_BLOCK_END.length).replace(/^\n+/, '');
-  const result = [before, after].filter(Boolean).join('\n\n');
-  if (result.trim()) {
-    await writeFile(claudeMd, result.endsWith('\n') ? result : result + '\n', 'utf8');
-  } else {
-    await rm(claudeMd, { force: true });
-  }
+export async function uninstallSkill(): Promise<void> {
+  await rm(SKILL_PATH, { force: true });
 }
 
-export async function enableRepo(repoPath: string): Promise<FleetViewConfig> {
-  const target = repoPath.trim();
-  const config = await readConfig();
-  const enabled = config.enabledRepos ?? [];
-  if (!enabled.includes(target)) enabled.push(target);
-  await injectClaudeMd(target);
-  return writeConfig({ ...config, enabledRepos: enabled });
-}
-
-export async function disableRepo(repoPath: string): Promise<FleetViewConfig> {
-  const target = repoPath.trim();
-  const config = await readConfig();
-  const enabled = (config.enabledRepos ?? []).filter((r) => r !== target);
-  await removeClaudeMd(target);
-  return writeConfig({ ...config, enabledRepos: enabled });
+export async function isSkillInstalled(): Promise<boolean> {
+  try { await readFile(SKILL_PATH, 'utf8'); return true; } catch { return false; }
 }
 
 export { CONFIG_PATH };

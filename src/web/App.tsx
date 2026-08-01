@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Type-only import: erased at build, so no Node code leaks into the browser bundle.
 import type { Fleet, Project, Session, SessionDigest } from '../lib/claude-adapter/types';
-import { ProjectSwitcher } from '../features/projects/web';
+import { ProjectSwitcher, ReportingSetup } from '../features/projects/web';
 import { projectSlugs } from '../features/projects/shared/slug';
 import { Teammates } from '../features/teammates/web';
 import { TaskBoard } from '../features/task-board/web';
-import { SessionView, NowPanel, SummaryPanel } from '../features/session-view/web';
+import { SessionView, NowPanel, SummaryPanel, SkillPrompt } from '../features/session-view/web';
 import { HookSetup } from '../features/hooks/web';
 import { ThemeToggle } from '../features/theme/web/ThemeToggle';
 import { useVisiblePoll } from '../ui/useVisiblePoll';
@@ -123,6 +123,7 @@ function ProjectView({ project, slug, completed, clearCompleted }: { project: Pr
   return (
     <>
       <HookSetup />
+      <ReportingSetup />
       <div className="pv-head">
         <div>
           <h2 className="pv-title">{project.name}</h2>
@@ -300,11 +301,12 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
             waitingFor={session?.waitingFor}
           />
           <SummaryPanel digest={digest} />
-          {session && session.tasks.length > 0 && (
+          <SkillPrompt digest={digest} />
+          {(session && session.tasks.length > 0 || digest && digest.tasks.length > 0) && (
             <section className="card">
               <div className="col">
                 <h3>Task board</h3>
-                <TaskBoard tasks={session.tasks} />
+                <TaskBoard tasks={session?.tasks.length ? session.tasks : digest?.tasks ?? []} />
               </div>
             </section>
           )}

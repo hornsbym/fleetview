@@ -3,6 +3,7 @@ export { ProjectSwitcher } from './ProjectSwitcher';
 export type { ProjectSwitcherProps } from './ProjectSwitcher';
 export { AddProject } from './AddProject';
 export type { AddProjectProps } from './AddProject';
+export { ReportingSetup } from './ReportingSetup';
 export type { FleetViewConfig, ConfigResponse, ConfigRequest } from '../shared/config';
 // Exported so other surfaces (e.g. a topbar "N need you" summary) read attention
 // exactly the way the switcher does.

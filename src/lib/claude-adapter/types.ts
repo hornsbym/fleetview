@@ -125,8 +125,6 @@ export interface Project {
   path: string;
   name: string;
   live: boolean;
-  /** Whether FleetView session reporting is enabled for this repo. */
-  reportingEnabled: boolean;
   activeTeammates: number;
   sessions: Session[];
 }
@@ -140,8 +138,6 @@ export interface Fleet {
 export interface FleetConfig {
   /** Additional watched repo paths — always shown as projects (additive, not a filter). */
   repos?: string[];
-  /** Repos where session reporting is enabled. */
-  enabledRepos?: string[];
 }
 
 /**
@@ -237,6 +233,8 @@ export interface Milestone {
 export interface AgentReport {
   /** 1-3 sentences on the conceptual work in flight. */
   now: string | null;
+  /** One-liner: the high-level objective this work is serving. */
+  goal: string | null;
   /** 1-5 sentence summary of what this session has accomplished. */
   summary: string | null;
   /** High-level things finished this session, oldest first. */
@@ -267,8 +265,12 @@ export interface SessionDigest {
   compactions: number;
   edits: number;
   tools: number;
-  /** The last real user prompt — what it's currently working toward. */
+  /** Agent-authored goal or the last real user prompt — what it's working toward. */
+  goal: string | null;
+  /** The last real user prompt (fallback when no agent-authored goal exists). */
   lastRequest: string | null;
+  /** Task plan derived from TaskCreate/TaskUpdate or TodoWrite in the transcript. */
+  tasks: Task[];
 }
 
 // --- Session environment: metadata from the init system message ---
