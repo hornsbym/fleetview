@@ -95,6 +95,14 @@ worth a model call per session before building it.
 
 Also unbuilt: applying either panel to the future read-only teammate pages.
 
+## Summary anchors: why not the top of the turn
+
+A bullet anchors to the assistant message that *confirms* the work — the prose
+following the report write, rather than the write itself (a bare `⚙ Write …json`
+line) or the user prompt that opened the turn. Anchoring at the top of the turn
+was tried and is wrong in the common case: a session that does all its work in
+one long turn collapses every bullet onto the same prompt.
+
 ## Use page titles to identify sessions and surface attention (UI)
 
 `document.title` is **never set** — `<title>FleetView</title>` in `index.html` is

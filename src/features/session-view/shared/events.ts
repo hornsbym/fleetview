@@ -8,6 +8,7 @@ export type {
   SessionDigest,
   SessionEnvironment,
   Milestone,
+  SummaryAnchor,
   TrailItem,
 } from '../../../lib/claude-adapter/types';
 

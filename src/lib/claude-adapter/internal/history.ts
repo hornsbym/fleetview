@@ -39,6 +39,10 @@ function normalize(msgs: SessionMessage[]): ChatItem[] {
     const msg = m.message as { role?: string; content?: unknown } | undefined;
     if (!msg) continue;
     const at = (m as unknown as { timestamp?: string }).timestamp || undefined;
+    // `uuid` is a declared field on SessionMessage (unlike `timestamp`, which
+    // still needs the cast above). One message can fan out into several items, so
+    // the ones that aren't the message itself get a suffix to stay unique.
+    const uuid = m.uuid || undefined;
     if (m.type === 'user') {
       // Skip tool_result-only user messages — those are tool plumbing, not prompts.
       const c = msg.content;
@@ -47,23 +51,23 @@ function normalize(msgs: SessionMessage[]): ChatItem[] {
       const text = textOf(c);
       if (!text.trim()) continue;
       const { clean, notifications } = extractNotifications(text);
-      for (const n of notifications) {
-        items.push({ kind: 'notification', text: n, at });
-      }
-      if (clean) items.push({ kind: 'user', text: clean, at });
+      notifications.forEach((n, i) => {
+        items.push({ kind: 'notification', text: n, at, id: uuid && `${uuid}:n${i}` });
+      });
+      if (clean) items.push({ kind: 'user', text: clean, at, id: uuid });
     } else if (m.type === 'assistant') {
       const c = Array.isArray(msg.content) ? msg.content : [];
       const text = textOf(c);
-      if (text.trim()) items.push({ kind: 'assistant', text, at });
+      if (text.trim()) items.push({ kind: 'assistant', text, at, id: uuid });
       for (const b of c as any[]) {
         // summarizeTool prefers Bash's own `description` over the raw command —
         // the human-readable text the model already wrote. v1 had a second, worse
         // copy of this here that made `description` unreachable (FUTURE.md).
         if (b?.type === 'tool_use') {
           if (b.name === 'Write' && typeof b.input?.file_path === 'string' && b.input.file_path.includes('/.claude/plans/') && b.input.content) {
-            items.push({ kind: 'plan', text: b.input.content, path: b.input.file_path, at });
+            items.push({ kind: 'plan', text: b.input.content, path: b.input.file_path, at, id: b.id && `${b.id}:plan` });
           }
-          items.push({ kind: 'tool', name: b.name ?? 'tool', summary: summarizeTool(b.name, b.input), at });
+          items.push({ kind: 'tool', name: b.name ?? 'tool', summary: summarizeTool(b.name, b.input), at, id: b.id ?? undefined });
         }
       }
     }
