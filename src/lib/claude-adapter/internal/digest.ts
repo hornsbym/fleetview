@@ -68,14 +68,10 @@ const REPORT_PATH = /\.fleetview[/\\]sessions[/\\][^/\\]+\.json$/;
 const titleKey = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim();
 
 /**
- * Record where each summary bullet first showed up.
- *
- * The agent can't report this itself — it never sees its own transcript ids. But
- * it rewrites the whole report file on every update, and those writes are in the
- * transcript with their full content, so the first write whose `summary` contains
- * a bullet is the moment that bullet came into existence. First write wins: later
- * writes repeat the same bullets, and it's the *first* claim that sits next to the
- * work.
+ * Record where each summary bullet first showed up. The agent rewrites the whole
+ * report on every update and those writes carry their content in the transcript,
+ * so the first write containing a bullet is where it came into existence — later
+ * writes just repeat it, further from the work.
  */
 function anchorSummary(c: Cursor, block: any, at: string | null) {
   if (block.name !== 'Write' || !REPORT_PATH.test(String(block.input?.file_path ?? ''))) return;
@@ -161,14 +157,9 @@ function ingest(c: Cursor, line: string) {
         : '';
     const trimmed = text.trim();
     // Skip tool plumbing and system-injected reminders; keep real prompts.
-    //
-    // `isMeta` is the second half of that rule and was missing: a loaded skill
-    // body and the harness's injected instruction blocks arrive as ordinary
-    // `type: 'user'` text that doesn't start with '<', so they were being taken
-    // for the user's own request. That shows up directly in the UI — with no
-    // self-reported goal, NowPanel renders `lastRequest` as "Working toward",
-    // and a session that ran /fleetview claimed to be working toward the skill's
-    // own documentation.
+    // `isMeta` is the second half of that rule: a loaded skill body and the
+    // harness's injected blocks are ordinary `type: 'user'` text not starting
+    // with '<', so without it they get taken for the user's own request.
     if (trimmed && !trimmed.startsWith('<') && o.isMeta !== true) {
       c.lastUser = trimmed.slice(0, 200);
     }
@@ -177,13 +168,10 @@ function ingest(c: Cursor, line: string) {
 
   if (o?.type !== 'assistant' || !Array.isArray(o?.message?.content)) return;
 
-  // Claim any anchors waiting on a confirmation with this message, BEFORE the
-  // tool_use loop below can add more. Order is what keeps a preamble out of it:
-  // text in the same message as the report write ran before the work finished,
-  // so only a later message can be the confirmation.
-  //
-  // Sidechain entries are subagent traffic that the session transcript doesn't
-  // render, so they can never be a jump target.
+  // Claim waiting anchors with this message, BEFORE the tool_use loop below can
+  // add more — text in the same message as the report write ran before the work
+  // finished, so only a later message can be the confirmation. Sidechain entries
+  // are subagent traffic the transcript doesn't render, so they never qualify.
   if (c.pendingConfirm.length && o.isSidechain !== true && typeof o.uuid === 'string') {
     const prose = o.message.content.some((b: any) => b?.type === 'text' && String(b.text ?? '').trim());
     if (prose) {

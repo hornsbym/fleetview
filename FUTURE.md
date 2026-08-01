@@ -150,6 +150,14 @@ and render a small collapsible panel on the session page.
 `BackgroundCommandCompleted` would make this real-time and robust. Worth a
 feature request at https://github.com/anthropics/claude-code/issues.
 
+## Summary anchors: why not the top of the turn
+
+A bullet anchors to the assistant message that *confirms* the work — the prose
+following the report write, rather than the write itself (a bare `⚙ Write …json`
+line) or the user prompt that opened the turn. Anchoring at the top of the turn
+was tried and is wrong in the common case: a session that does all its work in
+one long turn collapses every bullet onto the same prompt.
+
 ## Multi-machine / remote (speculative)
 
 Everything is `127.0.0.1`. Watching sessions on another machine would need an
