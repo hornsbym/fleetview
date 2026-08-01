@@ -80,6 +80,36 @@ async function worktreeAgents(repoCwd: string): Promise<Record<string, WorktreeI
 type WorktreeCache = (repoCwd: string) => Promise<Record<string, WorktreeInfo>>;
 
 /**
+ * The repo a cwd belongs to. A session running in a git worktree has a cwd of its
+ * own, and bucketing on that raw path split one repo into a "project" per worktree.
+ * `--git-common-dir` resolves to the MAIN repo's .git from inside any worktree, so
+ * worktrees and plain subdirectories both collapse to the root that owns them.
+ *
+ * Memoized per buildFleet call: /api/fleet polls every 2.5s and this would
+ * otherwise spawn a git process per session, the same trap worktreeCache exists for.
+ */
+function repoRootCache(): (cwd: string) => Promise<string> {
+  const cache = new Map<string, Promise<string>>();
+  const resolve = async (cwd: string): Promise<string> => {
+    try {
+      const { stdout } = await pexec(
+        'git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+        { timeout: 3000 },
+      );
+      const common = stdout.trim();
+      return common.endsWith('/.git') ? common.slice(0, -'/.git'.length) : cwd;
+    } catch {
+      return cwd; // not a git repo — it is its own project
+    }
+  };
+  return (cwd: string) => {
+    let hit = cache.get(cwd);
+    if (!hit) cache.set(cwd, hit = resolve(cwd));
+    return hit;
+  };
+}
+
+/**
  * Memoize `git worktree list` per repo for the lifetime of ONE buildFleet call.
  *
  * Subagent discovery runs per session, and a repo commonly has dozens of sessions
@@ -348,6 +378,7 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
       waitingFor: d.waitingFor,
       pid: d.pid,
       gitBranch: d.gitBranch,
+      worktree: null, // set during project bucketing, where the repo root is known
       lastActiveAt: d.lastActiveAt,
       tasks: d.tasks,
       counts: {
@@ -360,11 +391,18 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
   }));
 
   // --- 5. Bucket into projects. Watched repos are ADDITIVE, never a filter.
+  //        Sessions group by the repo that owns their cwd, so every worktree of a
+  //        repo lands under one project rather than masquerading as several.
   const byProject: Record<string, Project> = {};
   const mkProject = (key: string): Project =>
     (byProject[key] ||= { path: key, name: path.basename(key) || key, sessions: [], live: false, activeTeammates: 0 });
 
-  for (const s of sessions) mkProject(s.cwd || '(unknown project)').sessions.push(s);
+  const repoRoot = repoRootCache();
+  for (const s of sessions) {
+    const root = s.cwd ? await repoRoot(s.cwd) : null;
+    if (s.cwd && root !== s.cwd) s.worktree = path.basename(s.cwd);
+    mkProject(root || '(unknown project)').sessions.push(s);
+  }
   for (const repo of config.repos ?? []) mkProject(repo);
 
   const projects = Object.values(byProject).map(p => {

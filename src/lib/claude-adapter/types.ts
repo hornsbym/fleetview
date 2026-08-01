@@ -115,6 +115,9 @@ export interface Session {
   waitingFor: string | null;
   pid: number | null;
   gitBranch: string | null;
+  /** Worktree directory name when the session runs in one, else null. Sessions
+   *  bucket under their repo root, so this is what distinguishes siblings. */
+  worktree: string | null;
   lastActiveAt: number | null;
   tasks: Task[];
   counts: { pending: number; in_progress: number; completed: number };

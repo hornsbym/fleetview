@@ -97,7 +97,7 @@ function pendingOnlySession(id: string, cwd: string | null, pendingApprovals: nu
     needsApproval: true, pendingApprovals, hasQuestion,
     cwd, leadSessionId: id,
     name: null, kind: null, status: 'waiting', waitingFor: 'permission request',
-    pid: null, gitBranch: null, lastActiveAt: Date.now(),
+    pid: null, gitBranch: null, worktree: null, lastActiveAt: Date.now(),
     tasks: [], counts: { pending: 0, in_progress: 0, completed: 0 },
     members: [],
   };

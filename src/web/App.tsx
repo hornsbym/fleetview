@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 // Type-only import: erased at build, so no Node code leaks into the browser bundle.
 import type { Fleet, Project, Session, SessionDigest } from '../lib/claude-adapter/types';
 import { ProjectSwitcher, ReportingSetup } from '../features/projects/web';
@@ -161,7 +162,42 @@ function SessionTile({ slug, s, completed, clearCompleted }: { slug: string; s: 
       <div className="tile-uuid mono">{s.id}</div>
       {s.waitingFor && <div className="tile-waiting">waiting · {s.waitingFor}</div>}
       {s.gitBranch && <div className="tile-branch mono">⎇ {s.gitBranch}</div>}
+      {/* Sessions from every worktree share one project tile now, so name the
+          worktree — otherwise siblings are indistinguishable. */}
+      {s.worktree && (
+        <div className="tile-worktree mono" title={`Running in worktree ${s.worktree}`}>
+          ⧉ {s.worktree}
+        </div>
+      )}
     </button>
+  );
+}
+
+/** The lines under a session's name in the nav: what it's doing now, then where
+ *  it's doing it. Each is omitted when empty, so a plain session in the main
+ *  checkout collapses back to a single row. */
+function SessionNavDetail({ session: s }: { session: Session }) {
+  const lead = s.members.find(m => m.isLead);
+  // waitingFor is the actionable state, so it outranks the last tool call.
+  const activity = s.waitingFor ? `waiting · ${s.waitingFor}` : lead?.action ?? null;
+  const agents = s.members.filter(m => !m.isLead && !m.stale).length;
+  const openTasks = s.counts.pending + s.counts.in_progress;
+
+  const meta: ReactNode[] = [];
+  if (s.worktree) meta.push(<span key="wt" className="mono" title={`Worktree ${s.worktree}`}>⧉ {s.worktree}</span>);
+  else if (s.gitBranch) meta.push(<span key="br" className="mono" title={`Branch ${s.gitBranch}`}>⎇ {s.gitBranch}</span>);
+  if (agents) meta.push(<span key="ag">{agents} agent{agents > 1 ? 's' : ''}</span>);
+  if (openTasks) meta.push(<span key="tk">{openTasks} open</span>);
+
+  if (!activity && !meta.length) return null;
+
+  return (
+    <>
+      {activity && (
+        <span className={'snav-activity' + (s.waitingFor ? ' waiting' : '')}>{activity}</span>
+      )}
+      {meta.length > 0 && <span className="snav-meta">{meta}</span>}
+    </>
   );
 }
 
@@ -238,30 +274,33 @@ function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearComplete
                     + (unread ? ' unread' : '')}
                   onClick={() => { if (done) clearCompleted(s.id); readRef.current.add(s.id); navigate(sessionPath(slug, s.id)); }}
                 >
-                  <SessionIndicator state={indicatorOf(s)} />
-                  <span className="snav-name">{s.name || s.id}</span>
-                  {s.needsApproval && <span className="snav-badge">!</span>}
-                  {s.live && (
-                    <span
-                      className="snav-focus"
-                      role="button"
-                      tabIndex={-1}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (done) clearCompleted(s.id);
-                        readRef.current.add(s.id);
-                        navigate(sessionPath(slug, s.id));
-                        void fetch('/api/session/focus', {
-                          method: 'POST',
-                          headers: { 'content-type': 'application/json' },
-                          body: JSON.stringify({ sessionId: s.id, cwd: s.cwd }),
-                        });
-                      }}
-                      title="Focus terminal"
-                    >
-                      →
-                    </span>
-                  )}
+                  <span className="snav-top">
+                    <SessionIndicator state={indicatorOf(s)} />
+                    <span className="snav-name">{s.name || s.id}</span>
+                    {s.needsApproval && <span className="snav-badge">!</span>}
+                    {s.live && (
+                      <span
+                        className="snav-focus"
+                        role="button"
+                        tabIndex={-1}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (done) clearCompleted(s.id);
+                          readRef.current.add(s.id);
+                          navigate(sessionPath(slug, s.id));
+                          void fetch('/api/session/focus', {
+                            method: 'POST',
+                            headers: { 'content-type': 'application/json' },
+                            body: JSON.stringify({ sessionId: s.id, cwd: s.cwd }),
+                          });
+                        }}
+                        title="Focus terminal"
+                      >
+                        →
+                      </span>
+                    )}
+                  </span>
+                  <SessionNavDetail session={s} />
                 </button>
               );
             })}
