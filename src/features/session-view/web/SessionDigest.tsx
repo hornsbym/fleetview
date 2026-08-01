@@ -19,13 +19,16 @@ export function NowPanel({ digest, live, status, waitingFor }: {
 }) {
   const working = live && status !== 'idle' && status !== 'waiting';
   const blocked = live && status === 'waiting';
+  const done = !working && !blocked;
 
-  if (!working && !blocked) return null;
+  if (done && !digest?.now && !digest?.goal && !digest?.lastRequest) return null;
+
+  const heading = blocked ? 'Waiting' : done ? 'Just completed' : 'Working on now';
 
   return (
-    <section className="dg dg-now" aria-label="What this agent is working on now">
+    <section className={`dg dg-now${done ? ' dg-done-state' : ''}`} aria-label={heading}>
       <div className="dg-head">
-        <h3>Working on now</h3>
+        <h3>{heading}</h3>
         {working && <span className="dg-pulse" aria-hidden="true" />}
         {working && digest?.reported && (
           <span className="dg-src" title="Reported by the agent itself">self-reported</span>
@@ -40,7 +43,7 @@ export function NowPanel({ digest, live, status, waitingFor }: {
 
       {(digest?.goal || digest?.lastRequest) && (
         <div className="dg-goal">
-          <span className="dg-goal-label">Working toward</span>
+          <span className="dg-goal-label">{done ? 'Worked toward' : 'Working toward'}</span>
           <span className="dg-goal-text" title={digest.goal || digest.lastRequest || ''}>{digest.goal || digest.lastRequest}</span>
         </div>
       )}
