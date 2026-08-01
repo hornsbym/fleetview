@@ -16,7 +16,7 @@
 import { open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { summarizeTool } from './transcripts';
-import type { AgentReport, Milestone, PlanItem, SessionDigest, TrailItem } from '../types';
+import type { AgentReport, Milestone, PlanItem, SessionDigest, SummaryBullet, TrailItem } from '../types';
 
 /** How many recent tool calls to keep for the activity trail. */
 const TRAIL_MAX = 8;
@@ -195,12 +195,52 @@ async function readReport(cwd: string | null, sessionId: string): Promise<AgentR
       : [];
     const now = typeof raw?.now === 'string' ? raw.now.trim() : '';
     const goal = typeof raw?.goal === 'string' ? raw.goal.trim() : '';
-    const summary = typeof raw?.summary === 'string' ? raw.summary.trim() : '';
-    if (!now && !done.length && !summary && !goal) return null;
-    return { now: now || null, goal: goal || null, summary: summary || null, done, updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null };
+    const summary = summaryBullets(raw?.summary);
+    if (!now && !done.length && !summary.length && !goal) return null;
+    return { now: now || null, goal: goal || null, summary: summary.length ? summary : null, done, updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null };
   } catch {
     return null;
   }
+}
+
+const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+
+/** Split prose on sentence boundaries. The lookbehind requires a lowercase
+ *  letter or digit before the stop, which keeps "e.g." and "v1.2" intact; the
+ *  lookahead requires a capital, so a split only happens where a new sentence
+ *  plausibly starts. */
+const sentences = (text: string) =>
+  text.split(/(?<=[a-z0-9][.!?])\s+(?=[A-Z])/).map(s => s.trim()).filter(Boolean);
+
+/**
+ * Normalize `summary` into {title, description} bullets.
+ *
+ * Three shapes reach this, and all three have to render: the objects the skill
+ * asks for, bare strings (the shape the skill asked for previously), and one
+ * prose blob (the shape before that, and what an agent still produces when it
+ * paraphrases the instruction). Strings become title-only bullets — a sentence
+ * promoted to a title is honest, whereas inventing a title from its first few
+ * words is not. Prose is split so a paragraph isn't one dense bullet.
+ */
+function summaryBullets(raw: unknown): SummaryBullet[] {
+  const bullet = (v: unknown): SummaryBullet | null => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const o = v as Record<string, unknown>;
+      const description = clean(o.description);
+      // Description-only is malformed but recoverable: it's still the one piece
+      // of text the agent wrote, so show it rather than dropping the bullet.
+      const title = clean(o.title) || description;
+      if (!title) return null;
+      return { title, description: title === description ? '' : description };
+    }
+    const text = clean(v);
+    return text ? { title: text, description: '' } : null;
+  };
+
+  if (Array.isArray(raw)) return raw.map(bullet).filter((b): b is SummaryBullet => b !== null);
+  const text = clean(raw);
+  if (!text) return [];
+  return sentences(text).map(s => ({ title: s, description: '' }));
 }
 
 /** Conceptual description of recent activity derived from the tool trail.

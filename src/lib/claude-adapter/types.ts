@@ -225,6 +225,15 @@ export interface Milestone {
   at: string | null;
 }
 
+/** One accomplishment in a session summary: a scannable title, optionally
+ *  expanded by a sentence or two. Legacy reports carry only a title. */
+export interface SummaryBullet {
+  /** Short noun phrase — what was accomplished. */
+  title: string;
+  /** 1-2 short sentences of detail, or '' when the agent gave none. */
+  description: string;
+}
+
 /**
  * What an agent writes about itself to
  * `<cwd>/.fleetview/sessions/<CLAUDE_CODE_SESSION_ID>.json`.
@@ -235,8 +244,9 @@ export interface AgentReport {
   now: string | null;
   /** One-liner: the high-level objective this work is serving. */
   goal: string | null;
-  /** 1-5 sentence summary of what this session has accomplished. */
-  summary: string | null;
+  /** 1-5 accomplishments, oldest first. Agents may write bare strings or one
+   *  prose blob instead; readReport coerces both into bullets. */
+  summary: SummaryBullet[] | null;
   /** High-level things finished this session, oldest first. */
   done: string[];
   updatedAt: string | null;
@@ -250,8 +260,8 @@ export interface SessionDigest {
   /** 1-3 sentences on what's happening — the agent's own words when it reports
    *  them, else a conceptual description of recent activity. Never a command. */
   now: string | null;
-  /** 1-5 sentence summary of what this session has accomplished overall. */
-  summary: string | null;
+  /** What this session has accomplished overall, oldest first. */
+  summary: SummaryBullet[] | null;
   /** True when the agent maintains its own report (see AgentReport). */
   reported: boolean;
   reportedAt: string | null;

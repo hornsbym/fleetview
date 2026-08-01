@@ -2,7 +2,7 @@
 // after being away, without reading the transcript.
 //
 //   • NowPanel     — 1-3 sentences on the conceptual work in flight.
-//   • SummaryPanel — agent-authored blurb of what the session has accomplished.
+//   • SummaryPanel — agent-authored bullets on what the session has accomplished.
 //
 // Both read from `.fleetview/sessions/<id>.json`, with NowPanel falling back to
 // transcript-derived activity when no report file exists.
@@ -60,14 +60,22 @@ export function NowPanel({ digest, live, status, waitingFor }: {
 }
 
 export function SummaryPanel({ digest }: { digest: SessionDigest | null }) {
-  if (!digest?.summary) return null;
+  const bullets = digest?.summary ?? [];
+  if (!bullets.length) return null;
 
   return (
     <section className="dg dg-summary" aria-label="Session summary">
       <div className="dg-head">
         <h3>Summary</h3>
       </div>
-      <p className="dg-prose">{digest.summary}</p>
+      <ul className="dg-bullets">
+        {bullets.map((b, i) => (
+          <li key={i} className="dg-bullet">
+            <span className="dg-bullet-title">{b.title}</span>
+            {b.description && <span className="dg-bullet-desc">{b.description}</span>}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

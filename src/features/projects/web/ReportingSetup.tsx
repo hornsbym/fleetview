@@ -52,7 +52,8 @@ export function ReportingSetup() {
         </p>
         <p className="rs-note">
           Sessions only report when you explicitly run <code>/fleetview</code> — no
-          session is affected without your say-so.
+          session is affected without your say-so. Reports land in a self-ignored{' '}
+          <code>.fleetview/</code> directory, so nothing is ever committed.
         </p>
       </div>
       <div className="rs-actions">

@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ConfigRequest, ConfigResponse } from '../shared/config';
-import { addRepo, installSkill, isSkillInstalled, readConfig, removeRepo, uninstallSkill } from './config';
+import { addRepo, ensureSkillCurrent, installSkill, readConfig, removeRepo, uninstallSkill } from './config';
 
 function json(res: ServerResponse, code: number, body: ConfigResponse) {
   res.writeHead(code, { 'content-type': 'application/json' });
@@ -49,7 +49,10 @@ export async function handleConfigRoute(req: IncomingMessage, res: ServerRespons
     const method = (req.method || 'GET').toUpperCase();
     try {
       if (method === 'GET') {
-        send(res, 200, { ok: true, installed: await isSkillInstalled() });
+        // Reads the skill AND refreshes it if the installed copy is stale — see
+        // ensureSkillCurrent. Both panels poll this on mount, so an old install
+        // picks up skill changes the first time either one is rendered.
+        send(res, 200, { ok: true, ...(await ensureSkillCurrent()) });
         return true;
       }
       if (method === 'POST') {
