@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ChatItem, SessionEvent, PermissionDecision, PermissionRequest,
   HistoryResponse, PendingResponse, OkResponse, DigestResponse, SessionDigest,
+  SummaryAnchor,
 } from '../shared/events';
 import './SessionView.css';
 import './SessionEnvironment.css';
@@ -28,7 +29,17 @@ export interface SessionViewProps {
   sessionId: string;
   /** Lifts the digest to the page so the panels can live in the side column. */
   onDigest?: (d: SessionDigest | null) => void;
+  /**
+   * A request to scroll the transcript to a summary bullet's origin. `nonce`
+   * exists so clicking the same bullet twice re-scrolls — the anchor alone is
+   * unchanged and wouldn't re-fire the effect.
+   */
+  jumpTo?: { anchor: SummaryAnchor; nonce: number } | null;
 }
+
+/** How long the jumped-to entry stays highlighted. Long enough to find it after
+ *  the scroll settles, short enough not to linger as decoration. */
+const FLASH_MS = 1800;
 
 /** Re-poll cadence for a live transcript. Claude Code appends to the session JSONL
  *  mid-turn, so a tail at this interval is materially the same as streaming — there
@@ -62,7 +73,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function SessionView({ session, repo, sessionId, onDigest }: SessionViewProps) {
+export function SessionView({ session, repo, sessionId, onDigest, jumpTo }: SessionViewProps) {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [pending, setPending] = useState<PermissionRequest[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -184,6 +195,45 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
     stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
   }, []);
 
+  // Jump to a summary bullet's origin.
+  //
+  // Deliberately NOT dependent on `items`: the tail replaces that array every
+  // 2.5s, and re-running this on each poll would keep dragging a reader back to
+  // an old message they'd already scrolled away from. `nonce` is what re-fires it.
+  const [flashId, setFlashId] = useState<string | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!jumpTo || !el) return;
+    const { confirmedBy, reportedBy } = jumpTo.anchor;
+    // The message confirming the work is the useful destination; the report
+    // write itself is the fallback, for a bullet whose confirmation hasn't been
+    // written yet.
+    const found = [confirmedBy, reportedBy].find(
+      (id): id is string => !!id && !!el.querySelector(`[data-item-id="${CSS.escape(id)}"]`),
+    );
+    if (!found) return;
+    const target = el.querySelector(`[data-item-id="${CSS.escape(found)}"]`) as HTMLElement;
+
+    // Release the bottom-stick, or the next tail scrolls straight back down.
+    stickRef.current = false;
+    // Offset via rects rather than offsetTop, which would need the container to
+    // be a positioned ancestor. A third of the way down puts the landing entry
+    // under the eye with its lead-in still visible.
+    const delta = target.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    const top = el.scrollTop + delta - el.clientHeight / 3;
+    // Smooth scrolling is driven by rAF, which is paused in a hidden or heavily
+    // throttled tab — there the animation never advances and the jump silently
+    // does nothing. Fall back to an instant one, which is also what a
+    // reduced-motion preference asks for.
+    const animate = !document.hidden
+      && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollTo({ top, behavior: animate ? 'smooth' : 'auto' });
+
+    setFlashId(found);
+    const t = setTimeout(() => setFlashId(null), FLASH_MS);
+    return () => clearTimeout(t);
+  }, [jumpTo]);
+
   const [staleNotice, setStaleNotice] = useState<string | null>(null);
 
   const decide = useCallback(async (req: PermissionRequest, decision: PermissionDecision, updatedInput?: unknown) => {
@@ -230,7 +280,9 @@ export function SessionView({ session, repo, sessionId, onDigest }: SessionViewP
               : 'No messages in this session.'}
           </div>
         ) : (
-          items.map((it, i) => <TranscriptItem key={i} item={it} repo={repo} />)
+          items.map((it, i) => (
+            <TranscriptItem key={i} item={it} repo={repo} flash={!!it.id && it.id === flashId} />
+          ))
         )}
       </div>
 
@@ -352,36 +404,42 @@ function Timestamp({ at }: { at?: string }) {
   return <span className="oc-ts">{label}</span>;
 }
 
-function TranscriptItem({ item, repo }: { item: ChatItem; repo: string }) {
+function TranscriptItem({ item, repo, flash }: { item: ChatItem; repo: string; flash?: boolean }) {
+  // `data-item-id` is what makes an entry addressable from the summary panel;
+  // the flash class is applied to the same element so the highlight lands where
+  // the scroll does.
+  const cls = (base: string) => (flash ? `${base} oc-jump-flash` : base);
+  const id = item.id;
+
   switch (item.kind) {
     case 'user':
       return (
-        <div className="oc-msg oc-user">
+        <div className={cls('oc-msg oc-user')} data-item-id={id}>
           <Timestamp at={item.at} />
           <div className="oc-bubble">{linkify(item.text, repo)}</div>
         </div>
       );
     case 'assistant':
       return (
-        <div className="oc-msg oc-assistant">
+        <div className={cls('oc-msg oc-assistant')} data-item-id={id}>
           <div className="oc-bubble"><Markdown text={item.text} repo={repo} /></div>
           <Timestamp at={item.at} />
         </div>
       );
     case 'tool':
-      return <div className="oc-tool">⚙ {item.name}{item.summary && <span className="oc-tool-arg mono">: {linkify(item.summary, repo)}</span>}</div>;
+      return <div className={cls('oc-tool')} data-item-id={id}>⚙ {item.name}{item.summary && <span className="oc-tool-arg mono">: {linkify(item.summary, repo)}</span>}</div>;
     case 'result':
-      return <div className="oc-result">✓ done{item.tokens != null ? ` · ${item.tokens.toLocaleString()} tok` : ''}</div>;
+      return <div className={cls('oc-result')} data-item-id={id}>✓ done{item.tokens != null ? ` · ${item.tokens.toLocaleString()} tok` : ''}</div>;
     case 'notification':
       return (
-        <div className="oc-notification">
+        <div className={cls('oc-notification')} data-item-id={id}>
           <span className="oc-notif-icon">⚡</span>
           <span>{item.text}</span>
         </div>
       );
     case 'plan':
       return (
-        <details className="oc-plan-card" open>
+        <details className={cls('oc-plan-card')} data-item-id={id} open>
           <summary className="oc-plan-header">
             Plan: {item.path.split('/').pop()}
           </summary>

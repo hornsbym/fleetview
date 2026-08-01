@@ -16,7 +16,7 @@
 import { open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { summarizeTool } from './transcripts';
-import type { AgentReport, Milestone, PlanItem, SessionDigest, SummaryBullet, TrailItem } from '../types';
+import type { AgentReport, Milestone, PlanItem, SessionDigest, SummaryAnchor, SummaryBullet, TrailItem } from '../types';
 
 /** How many recent tool calls to keep for the activity trail. */
 const TRAIL_MAX = 8;
@@ -35,6 +35,11 @@ interface Cursor {
   edits: number;
   tools: number;
   lastUser: string | null;
+  /** Where each summary bullet first appeared, keyed by normalized title. */
+  summaryAnchors: Map<string, SummaryAnchor>;
+  /** Anchors still waiting for the prose message that confirms their work.
+   *  Held by reference, so filling `confirmedBy` in updates the stored anchor. */
+  pendingConfirm: SummaryAnchor[];
   /** Tasks created via TaskCreate, keyed by id. */
   tasks: Map<string, { subject: string; status: string }>;
   taskNextId: number;
@@ -46,8 +51,44 @@ const cursors = new Map<string, Cursor>();
 
 const fresh = (): Cursor => ({
   offset: 0, toolResults: new Set(), pendingAgents: new Map(), trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastUser: null,
+  summaryAnchors: new Map(), pendingConfirm: [],
   tasks: new Map(), taskNextId: 1, todoWrite: null,
 });
+
+/** The report an agent maintains about itself, by path shape. Matching any
+ *  session file rather than this session's specific id is deliberate: a session
+ *  only ever writes its own, and the scan doesn't otherwise need to know the id. */
+const REPORT_PATH = /\.fleetview[/\\]sessions[/\\][^/\\]+\.json$/;
+
+/** Join key for matching a bullet in the current report against one seen in an
+ *  earlier write. Titles are prose the agent retypes each time, so tolerate
+ *  whitespace and trailing-punctuation drift — but nothing more. A looser match
+ *  would confidently link a bullet to the wrong part of the conversation, which
+ *  is worse than showing no link at all. */
+const titleKey = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim();
+
+/**
+ * Record where each summary bullet first showed up.
+ *
+ * The agent can't report this itself — it never sees its own transcript ids. But
+ * it rewrites the whole report file on every update, and those writes are in the
+ * transcript with their full content, so the first write whose `summary` contains
+ * a bullet is the moment that bullet came into existence. First write wins: later
+ * writes repeat the same bullets, and it's the *first* claim that sits next to the
+ * work.
+ */
+function anchorSummary(c: Cursor, block: any, at: string | null) {
+  if (block.name !== 'Write' || !REPORT_PATH.test(String(block.input?.file_path ?? ''))) return;
+  let raw: unknown;
+  try { raw = JSON.parse(String(block.input?.content ?? '')); } catch { return; }
+  for (const b of summaryBullets((raw as any)?.summary)) {
+    const key = titleKey(b.title);
+    if (!key || c.summaryAnchors.has(key)) continue;
+    const anchor: SummaryAnchor = { reportedBy: String(block.id ?? ''), confirmedBy: null, at };
+    c.summaryAnchors.set(key, anchor);
+    c.pendingConfirm.push(anchor);
+  }
+}
 
 /**
  * Pull a commit subject out of a `git commit` invocation.
@@ -120,11 +161,36 @@ function ingest(c: Cursor, line: string) {
         : '';
     const trimmed = text.trim();
     // Skip tool plumbing and system-injected reminders; keep real prompts.
-    if (trimmed && !trimmed.startsWith('<')) c.lastUser = trimmed.slice(0, 200);
+    //
+    // `isMeta` is the second half of that rule and was missing: a loaded skill
+    // body and the harness's injected instruction blocks arrive as ordinary
+    // `type: 'user'` text that doesn't start with '<', so they were being taken
+    // for the user's own request. That shows up directly in the UI — with no
+    // self-reported goal, NowPanel renders `lastRequest` as "Working toward",
+    // and a session that ran /fleetview claimed to be working toward the skill's
+    // own documentation.
+    if (trimmed && !trimmed.startsWith('<') && o.isMeta !== true) {
+      c.lastUser = trimmed.slice(0, 200);
+    }
     return;
   }
 
   if (o?.type !== 'assistant' || !Array.isArray(o?.message?.content)) return;
+
+  // Claim any anchors waiting on a confirmation with this message, BEFORE the
+  // tool_use loop below can add more. Order is what keeps a preamble out of it:
+  // text in the same message as the report write ran before the work finished,
+  // so only a later message can be the confirmation.
+  //
+  // Sidechain entries are subagent traffic that the session transcript doesn't
+  // render, so they can never be a jump target.
+  if (c.pendingConfirm.length && o.isSidechain !== true && typeof o.uuid === 'string') {
+    const prose = o.message.content.some((b: any) => b?.type === 'text' && String(b.text ?? '').trim());
+    if (prose) {
+      for (const a of c.pendingConfirm) a.confirmedBy = o.uuid;
+      c.pendingConfirm = [];
+    }
+  }
 
   for (const b of o.message.content) {
     if (!b || b.type !== 'tool_use') continue;
@@ -135,6 +201,8 @@ function ingest(c: Cursor, line: string) {
     if (c.trail.length > TRAIL_MAX) c.trail.shift();
 
     if (b.name === 'Write' || b.name === 'Edit' || b.name === 'NotebookEdit') c.edits++;
+
+    anchorSummary(c, b, o.timestamp ?? null);
 
     if (b.name === 'Agent' && b.id) {
       const desc = b.input?.description || b.input?.prompt?.slice(0, 80) || 'subagent';
@@ -415,11 +483,18 @@ export async function readDigest(
   const trail = [...c.trail].reverse();       // newest first
   const derived = [...c.done].reverse();      // newest first
 
+  // The report file is the source of the bullets; the transcript scan is the
+  // source of where they came from. Join here rather than in readReport, which
+  // has no view of the transcript.
+  const summary = report?.summary
+    ? report.summary.map(b => ({ ...b, anchor: c.summaryAnchors.get(titleKey(b.title)) ?? null }))
+    : null;
+
   return {
     // The agent's own sentence wins; otherwise say what it's conceptually doing
     // rather than naming the tool — a command string is not an explanation.
     now: report?.now ?? describeActivity(trail),
-    summary: report?.summary ?? null,
+    summary,
     reported: !!report,
     reportedAt: report?.updatedAt ?? null,
     doing: trail[0] ?? null,

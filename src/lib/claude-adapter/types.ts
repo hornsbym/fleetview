@@ -225,6 +225,32 @@ export interface Milestone {
   at: string | null;
 }
 
+/**
+ * Where a summary bullet's work lives in the transcript.
+ *
+ * Not self-reported — an agent never sees its own transcript ids. Derived by
+ * diffing the `summary` array across successive report writes, so the anchor is
+ * "the write that first carried this bullet" (see digest.ts `anchorSummary`).
+ *
+ * The useful destination is where the agent *says it finished* — the report
+ * write itself lands in a message that is pure tool calls and no prose, and the
+ * prose that follows is the "here's what I did" write-up. Anchoring at the top
+ * of the turn instead was tried and is wrong in the common case: a session that
+ * does all its work in one long turn collapses every bullet onto the same
+ * prompt.
+ */
+export interface SummaryAnchor {
+  /** tool_use id of the report Write that first carried this bullet. Exact, but
+   *  points at a bare `⚙ Write …json` line — the fallback, not the target. */
+  reportedBy: string;
+  /** uuid of the first assistant message with prose after that write: the one
+   *  confirming the work. Null until the agent writes it — a report updated
+   *  mid-task has no confirmation yet. */
+  confirmedBy: string | null;
+  /** Timestamp of the report write. */
+  at: string | null;
+}
+
 /** One accomplishment in a session summary: a scannable title, optionally
  *  expanded by a sentence or two. Legacy reports carry only a title. */
 export interface SummaryBullet {
@@ -232,6 +258,9 @@ export interface SummaryBullet {
   title: string;
   /** 1-2 short sentences of detail, or '' when the agent gave none. */
   description: string;
+  /** Where this landed in the transcript. Null when it can't be traced —
+   *  a report written by `Edit`, or a title reworded since it first appeared. */
+  anchor?: SummaryAnchor | null;
 }
 
 /**
@@ -296,11 +325,19 @@ export interface SessionEnvironment {
   version: string;
 }
 
-/** One normalized transcript entry, for rendering a session read-only. */
-export type ChatItem =
+/**
+ * One normalized transcript entry, for rendering a session read-only.
+ *
+ * `id` is the transcript's own identity for the entry — the source message's
+ * `uuid`, or the `tool_use` id for the items a single assistant message fans out
+ * into — which is what makes an entry addressable from outside (see
+ * SummaryAnchor). Optional because a malformed entry may carry neither.
+ */
+export type ChatItem = { id?: string } & (
   | { kind: 'user'; text: string; at?: string }
   | { kind: 'assistant'; text: string; at?: string }
   | { kind: 'tool'; name: string; summary: string; at?: string }
   | { kind: 'result'; tokens?: number; at?: string }
   | { kind: 'notification'; text: string; at?: string }
-  | { kind: 'plan'; text: string; path: string; at?: string };
+  | { kind: 'plan'; text: string; path: string; at?: string }
+);

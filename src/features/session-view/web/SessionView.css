@@ -377,3 +377,22 @@
 
 /* Stale notice */
 .oc-stale-notice { font-size: 12px; color: var(--dim); font-style: italic; padding: 4px 12px; }
+
+/* Jump target — where a summary bullet's work happened.
+   The transcript is dense and the scroll lands mid-history, so the entry has to
+   announce itself; it fades rather than latching, because it marks "here" for a
+   moment and then gets out of the way of reading. Ring + tint rather than a
+   background swap, so it reads the same over a bubble, a tool line, or a plan
+   card — all six entry kinds can carry it. */
+@keyframes oc-jump-flash {
+  from { box-shadow: 0 0 0 2px var(--lead); background: color-mix(in srgb, var(--lead) 14%, transparent); }
+  to   { box-shadow: 0 0 0 2px transparent; background: transparent; }
+}
+.oc-jump-flash {
+  border-radius: var(--radius);
+  animation: oc-jump-flash 1.8s ease-out forwards;
+}
+/* Respect a reduced-motion preference: keep the marker, drop the fade. */
+@media (prefers-reduced-motion: reduce) {
+  .oc-jump-flash { animation: none; box-shadow: 0 0 0 2px var(--lead); }
+}

@@ -48,6 +48,18 @@
 .dg-bullet-title { display: block; color: var(--ink); font-weight: 600; }
 .dg-bullet-desc { display: block; margin-top: 2px; font-size: 12px; color: var(--dim); }
 
+/* A traceable bullet is a control, but it's still a list item first — no button
+   chrome, and it only picks up an underline on hover so the panel stays a
+   readable summary rather than a wall of links. Bullets we couldn't trace stay
+   plain, so the underline is also the signal that a jump exists. */
+.dg-bullet-jump {
+  width: 100%; padding: 0; border: 0; background: none;
+  font: inherit; font-weight: 600; color: var(--ink);
+  text-align: left; cursor: pointer;
+}
+.dg-bullet-jump:hover { color: var(--lead); text-decoration: underline; text-underline-offset: 2px; }
+.dg-bullet-jump:focus-visible { outline: 1px solid var(--lead); outline-offset: 2px; border-radius: 2px; }
+
 
 .dg-counts {
   display: flex; gap: 12px; margin-top: 10px; padding-top: 8px;

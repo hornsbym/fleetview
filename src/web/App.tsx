@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Type-only import: erased at build, so no Node code leaks into the browser bundle.
-import type { Fleet, Project, Session, SessionDigest } from '../lib/claude-adapter/types';
+import type { Fleet, Project, Session, SessionDigest, SummaryAnchor } from '../lib/claude-adapter/types';
 import { ProjectSwitcher, ReportingSetup } from '../features/projects/web';
 import { projectSlugs } from '../features/projects/shared/slug';
 import { Teammates } from '../features/teammates/web';
@@ -274,6 +274,13 @@ function SessionNav({ fleet, slugMaps, activeSessionId, completed, clearComplete
 
 function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: string; sessionId: string; session: Session | null }) {
   const [digest, setDigest] = useState<SessionDigest | null>(null);
+  // The summary panel and the transcript are siblings, so the jump request is
+  // held here — the one piece of state they share. The counter makes each click
+  // distinct so re-clicking the same bullet scrolls again.
+  const [jumpTo, setJumpTo] = useState<{ anchor: SummaryAnchor; nonce: number } | null>(null);
+  const onJump = useCallback((anchor: SummaryAnchor) => {
+    setJumpTo(prev => ({ anchor, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
   return (
     <div className="sp">
       <div className="sp-crumbs">
@@ -283,7 +290,7 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
       </div>
       <div className="sp-grid">
         <div className="sp-chat">
-          <SessionView session={session} repo={repo} sessionId={sessionId} onDigest={setDigest} />
+          <SessionView session={session} repo={repo} sessionId={sessionId} onDigest={setDigest} jumpTo={jumpTo} />
         </div>
         <div className="sp-agents">
           <section className="card">
@@ -300,7 +307,7 @@ function SessionPage({ repo, slug, sessionId, session }: { repo: string; slug: s
             status={session?.status}
             waitingFor={session?.waitingFor}
           />
-          <SummaryPanel digest={digest} />
+          <SummaryPanel digest={digest} onJump={onJump} />
           <SkillPrompt digest={digest} />
           {(session && session.tasks.length > 0 || digest && digest.tasks.length > 0) && (
             <section className="card">

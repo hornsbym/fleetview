@@ -6,7 +6,7 @@
 //
 // Both read from `.fleetview/sessions/<id>.json`, with NowPanel falling back to
 // transcript-derived activity when no report file exists.
-import type { SessionDigest } from '../shared/events';
+import type { SessionDigest, SummaryAnchor } from '../shared/events';
 import './SessionDigest.css';
 
 
@@ -59,7 +59,12 @@ export function NowPanel({ digest, live, status, waitingFor }: {
   );
 }
 
-export function SummaryPanel({ digest }: { digest: SessionDigest | null }) {
+export function SummaryPanel({ digest, onJump }: {
+  digest: SessionDigest | null;
+  /** Scroll the transcript to where this bullet's work happened. Omitted where
+   *  there's no transcript alongside the panel to scroll. */
+  onJump?: (anchor: SummaryAnchor) => void;
+}) {
   const bullets = digest?.summary ?? [];
   if (!bullets.length) return null;
 
@@ -69,12 +74,29 @@ export function SummaryPanel({ digest }: { digest: SessionDigest | null }) {
         <h3>Summary</h3>
       </div>
       <ul className="dg-bullets">
-        {bullets.map((b, i) => (
-          <li key={i} className="dg-bullet">
-            <span className="dg-bullet-title">{b.title}</span>
-            {b.description && <span className="dg-bullet-desc">{b.description}</span>}
-          </li>
-        ))}
+        {bullets.map((b, i) => {
+          const anchor = onJump && b.anchor ? b.anchor : null;
+          return (
+            <li key={i} className="dg-bullet">
+              {/* Only bullets we can actually trace become interactive. An
+                  untraceable one stays plain text rather than offering a jump
+                  that goes nowhere. */}
+              {anchor
+                ? (
+                  <button
+                    type="button"
+                    className="dg-bullet-title dg-bullet-jump"
+                    onClick={() => onJump!(anchor)}
+                    title="Jump to this in the transcript"
+                  >
+                    {b.title}
+                  </button>
+                )
+                : <span className="dg-bullet-title">{b.title}</span>}
+              {b.description && <span className="dg-bullet-desc">{b.description}</span>}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
