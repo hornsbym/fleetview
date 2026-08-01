@@ -1,19 +1,17 @@
 // Monitor-plane assembly. FleetView observes Claude Code sessions; it never owns
 // one, so discovery must not depend on ownership.
 //
-// Discovery order (this is the important change from v1):
+// Discovery order:
 //   1. `claude agents --json`  -> every LIVE session, with real liveness.
 //   2. SDK listSessions(dir)   -> every session on disk for a watched repo.
-//   3. ~/.claude/{tasks,teams} -> ENRICHMENT ONLY (task boards, team rosters).
-//
-// v1 discovered from (3) alone, which made terminal-started sessions invisible:
-// a session with neither a tasks/ nor a teams/ dir produced no tile at all.
+//   3. ~/.claude/teams          -> ENRICHMENT ONLY (team rosters).
+//   4. Transcripts (TodoWrite) -> task board derived from the lead's plan checklist.
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { HOME, TASKS, TEAMS, PROJECTS, encodeCwd } from './paths';
-import { readActivity, transcriptCwd } from './transcripts';
+import { HOME, TEAMS, PROJECTS, encodeCwd } from './paths';
+import { readActivity, readModel, transcriptCwd } from './transcripts';
 import { liveSessions, knownSessions, canonicalSessionId } from './sessions';
 import { completedToolUses } from './digest';
 import type {
@@ -42,13 +40,6 @@ async function listDirs(p: string): Promise<string[]> {
   catch { return []; }
 }
 
-async function loadTasks(dir: string): Promise<Task[]> {
-  let files: string[]; try { files = await readdir(dir); } catch { return []; }
-  const tasks: Task[] = [];
-  for (const f of files) if (/^\d+\.json$/.test(f)) { const t = await readJson(path.join(dir, f)); if (t) tasks.push(t); }
-  return tasks.sort((a, b) => Number(a.id) - Number(b.id));
-}
-
 async function loadLiveTeams(): Promise<Record<string, any>> {
   const out: Record<string, any> = {};
   for (const n of await listDirs(TEAMS)) { const c = await readJson(path.join(TEAMS, n, 'config.json')); if (c) out[n] = c; }
@@ -69,19 +60,24 @@ async function transcriptPath(sessionId: string, cwd: string | null): Promise<st
   return null;
 }
 
-async function worktreeAgents(repoCwd: string): Promise<Record<string, string>> {
-  const map: Record<string, string> = {};
+interface WorktreeInfo { path: string; branch: string | null; }
+
+async function worktreeAgents(repoCwd: string): Promise<Record<string, WorktreeInfo>> {
+  const map: Record<string, WorktreeInfo> = {};
   try {
     const { stdout } = await pexec('git', ['-C', repoCwd, 'worktree', 'list', '--porcelain'], { maxBuffer: 1 << 20 });
-    for (const line of stdout.split('\n')) {
-      const m = line.match(/^worktree (.*\/\.claude\/worktrees\/agent-([0-9a-f]+))\s*$/);
-      if (m) map[m[2]] = m[1];
+    const blocks = stdout.split('\n\n');
+    for (const block of blocks) {
+      const wtMatch = block.match(/^worktree (.*\/\.claude\/worktrees\/agent-([0-9a-f]+))\s*$/m);
+      if (!wtMatch) continue;
+      const branchMatch = block.match(/^branch refs\/heads\/(.+)$/m);
+      map[wtMatch[2]] = { path: wtMatch[1], branch: branchMatch ? branchMatch[1] : null };
     }
   } catch { /* not a git repo / no worktrees */ }
   return map;
 }
 
-type WorktreeCache = (repoCwd: string) => Promise<Record<string, string>>;
+type WorktreeCache = (repoCwd: string) => Promise<Record<string, WorktreeInfo>>;
 
 /**
  * Memoize `git worktree list` per repo for the lifetime of ONE buildFleet call.
@@ -92,7 +88,7 @@ type WorktreeCache = (repoCwd: string) => Promise<Record<string, string>>;
  * Sessions in a repo share one worktree list, so one spawn per repo is enough.
  */
 function worktreeCache(): WorktreeCache {
-  const cache = new Map<string, Promise<Record<string, string>>>();
+  const cache = new Map<string, Promise<Record<string, WorktreeInfo>>>();
   return (repoCwd: string) => {
     let hit = cache.get(repoCwd);
     if (!hit) cache.set(repoCwd, hit = worktreeAgents(repoCwd));
@@ -102,7 +98,7 @@ function worktreeCache(): WorktreeCache {
 
 function newTeammate(partial: Partial<Teammate> & Pick<Teammate, 'agentId' | 'name' | 'agentType' | 'isLead'>): Teammate {
   return {
-    cwd: null, worktree: null, task: null, action: null, actionAt: null,
+    cwd: null, worktree: null, branch: null, task: null, action: null, actionAt: null,
     plan: null, hasTranscript: false, stale: false, finished: null, ...partial,
   };
 }
@@ -137,8 +133,17 @@ async function discoverSubagents(
   const dir = path.join(PROJECTS, encodeCwd(repoCwd), sessionId, 'subagents');
   let files: string[]; try { files = (await readdir(dir)).filter(f => /^agent-.*\.jsonl$/.test(f)); } catch { return []; }
   const wt = await worktrees(repoCwd);
-  // Which spawns have returned. Absence means still running — idle or busy.
-  const returned = await completedToolUses(parentTranscript);
+  // Which spawns have returned from the SESSION lead. Absence means still running.
+  const returnedFromSession = await completedToolUses(parentTranscript);
+  // Depth-2+ agents return to their parent agent, not the session — cache per parent.
+  const returnedFromAgent = new Map<string, Set<string>>();
+  async function returnedFrom(parentAgentId: string): Promise<Set<string>> {
+    let s = returnedFromAgent.get(parentAgentId);
+    if (s) return s;
+    s = await completedToolUses(path.join(dir, `agent-${parentAgentId}.jsonl`));
+    returnedFromAgent.set(parentAgentId, s);
+    return s;
+  }
   const out: Teammate[] = [];
   for (const f of files) {
     const id = f.replace(/^agent-/, '').replace(/\.jsonl$/, '');
@@ -146,15 +151,21 @@ async function discoverSubagents(
     let mtime = 0; try { mtime = (await stat(full)).mtimeMs; } catch { continue; }
     const meta = await readMeta(path.join(dir, `agent-${id}.meta.json`));
     const a = await readActivity(full);
+    const model = await readModel(full);
+    const returned = meta.parentAgentId
+      ? await returnedFrom(meta.parentAgentId)
+      : returnedFromSession;
     const t = newTeammate({
       agentId: id,
       name: meta.name || meta.agentType || `agent-${id.slice(0, 8)}`,
       agentType: meta.agentType || `agent-${id.slice(0, 8)}`,
       desc: meta.description || '',
       isLead: false,
-      cwd: wt[id] || null,
-      worktree: wt[id] || null,
+      cwd: wt[id]?.path || null,
+      worktree: wt[id]?.path || null,
+      branch: wt[id]?.branch || null,
       action: a.action, actionAt: a.at, plan: a.plan,
+      model,
       hasTranscript: true,
       stale: Date.now() - mtime > 15000,
       finished: typeof meta.toolUseId === 'string' ? returned.has(meta.toolUseId) : null,
@@ -230,17 +241,10 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
     if (k.lastModified && (!d.lastActiveAt || k.lastModified > d.lastActiveAt)) d.lastActiveAt = k.lastModified;
   }
 
-  // --- 3. Enrichment from ~/.claude/{tasks,teams}. These no longer create tiles on
+  // --- 3. Enrichment from ~/.claude/teams. These no longer create tiles on
   //        their own unless they resolve to a real session — an unresolvable
   //        `session-<8hex>` dir is an orphan (transcript cleaned up) and is dropped.
   const teams = await loadLiveTeams();
-  for (const dir of await listDirs(TASKS)) {
-    const id = canonicalSessionId(dir, allIds);
-    if (!id) continue;
-    const d = get(id);
-    d.tasks = await loadTasks(path.join(TASKS, dir));
-    d.team ||= teams[dir] || null;
-  }
   for (const [name, team] of Object.entries<any>(teams)) {
     const id = canonicalSessionId(name, allIds);
     if (!id) continue;
@@ -283,20 +287,32 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
       }));
     }
 
+    // Read the lead's transcript first — this populates plan from TodoWrite.
+    const lead = members.find(m => m.isLead)!;
+    const tp = await transcriptPath(d.id, d.cwd);
+    if (tp) {
+      const a = await readActivity(tp);
+      lead.action = a.action; lead.actionAt = a.at; lead.hasTranscript = true;
+      if (a.plan) lead.plan = a.plan;
+      lead.model = await readModel(tp);
+    }
+
+    // Promote the lead's TodoWrite plan items to session tasks.
+    if (d.tasks.length === 0 && lead.plan?.length) {
+      d.tasks = lead.plan.map((p, i) => ({
+        id: String(i + 1),
+        subject: p.content,
+        status: p.status === 'completed' ? 'completed' as const : p.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+      }));
+    }
+
     const ownedBy = (m: Teammate) => d.tasks.filter(t => t.owner === m.name || t.owner === m.agentType);
     for (const m of members) {
+      if (m.isLead) continue;
       const ip = d.tasks.find(t => t.status === 'in_progress' && (t.owner === m.name || t.owner === m.agentType));
       m.task = ip ? { subject: ip.subject, activeForm: ip.activeForm } : null;
       const owned = ownedBy(m);
       if (owned.length) m.plan = owned.map(t => ({ content: t.subject, status: t.status }));
-      if (m.isLead) {
-        const tp = await transcriptPath(d.id, d.cwd);
-        if (tp) {
-          const a = await readActivity(tp);
-          m.action = a.action; m.actionAt = a.at; m.hasTranscript = true;
-          if (a.plan) m.plan = a.plan;
-        }
-      }
     }
 
     // Subagent discovery is gated on cwd alone — NOT on liveness. A session that
@@ -323,6 +339,7 @@ export async function buildFleet(config: FleetConfig = {}): Promise<Fleet> {
       attached: d.live,
       needsApproval: false,
       pendingApprovals: 0,
+      hasQuestion: false,
       cwd: d.cwd,
       leadSessionId: d.id,
       name: d.name,

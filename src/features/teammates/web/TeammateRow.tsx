@@ -1,6 +1,22 @@
 import type { Teammate, TeammatePhase } from '../../../lib/claude-adapter/types';
 import { relativeTime } from './relativeTime';
 
+function shortModel(raw: string): string {
+  // Strip common prefixes/suffixes to get a readable short name.
+  // "us.anthropic.claude-opus-4-6-v1" → "opus 4.6"
+  // "claude-sonnet-4-5-20251001" → "sonnet 4.5"
+  // "claude-opus-4-6" → "opus 4.6"
+  const m = raw.match(/(?:claude-?)?(opus|sonnet|haiku|fable)[- ]?(\d+)[- ]?(\d+)?/i);
+  if (m) {
+    const family = m[1].toLowerCase();
+    const major = m[2];
+    const minor = m[3] || '0';
+    return `${family} ${major}.${minor}`;
+  }
+  // Fallback: strip provider prefix
+  return raw.replace(/^us\.anthropic\./, '').replace(/^anthropic\./, '');
+}
+
 // The three plan statuses we style; anything else degrades to "pending".
 type PlanStatus = 'pending' | 'in_progress' | 'completed';
 function normalizeStatus(s: string): PlanStatus {
@@ -68,6 +84,7 @@ export function TeammateRow({ m, onApprove, onRequestChanges, approvable = true 
           {m.isLead ? 'orchestrator' : 'teammate'}
         </span>
         <span className="tm-name">{m.agentType || m.name}</span>
+        {m.model && <span className="tm-model mono">{shortModel(m.model)}</span>}
         {phase && (
           <span className={'tm-phase' + (phaseKnown ? ` ${phase}` : '')}>{phaseText}</span>
         )}
@@ -80,6 +97,11 @@ export function TeammateRow({ m, onApprove, onRequestChanges, approvable = true 
         {m.worktree && (
           <span className="tm-worktree mono" title={m.worktree}>
             ⌥ {worktreeLabel(m.worktree)}
+          </span>
+        )}
+        {m.branch && (
+          <span className="tm-branch mono" title={`Branch: ${m.branch}`}>
+            ⎇ {m.branch}
           </span>
         )}
       </header>

@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ConfigRequest, ConfigResponse } from '../shared/config';
-import { addRepo, readConfig, removeRepo } from './config';
+import { addRepo, ensureSkillCurrent, installSkill, readConfig, removeRepo, uninstallSkill } from './config';
 
 function json(res: ServerResponse, code: number, body: ConfigResponse) {
   res.writeHead(code, { 'content-type': 'application/json' });
@@ -32,12 +32,51 @@ async function validateAdd(repoPath: string): Promise<string | null> {
   return null;
 }
 
+function send(res: ServerResponse, code: number, body: unknown) {
+  res.writeHead(code, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
 /**
  * Handles GET/POST /api/config. Returns true when it owned the request (response
  * already written), false to let the caller fall through to other routes.
  */
 export async function handleConfigRoute(req: IncomingMessage, res: ServerResponse): Promise<boolean> {
   const url = new URL(req.url || '/', 'http://localhost');
+
+  // --- /api/skill: install/uninstall the global /fleetview slash command ---
+  if (url.pathname === '/api/skill') {
+    const method = (req.method || 'GET').toUpperCase();
+    try {
+      if (method === 'GET') {
+        // Reads the skill AND refreshes it if the installed copy is stale — see
+        // ensureSkillCurrent. Both panels poll this on mount, so an old install
+        // picks up skill changes the first time either one is rendered.
+        send(res, 200, { ok: true, ...(await ensureSkillCurrent()) });
+        return true;
+      }
+      if (method === 'POST') {
+        const body = (await readBody(req)) as { action?: string };
+        if (body.action === 'install') {
+          await installSkill();
+          send(res, 200, { ok: true, installed: true });
+          return true;
+        }
+        if (body.action === 'uninstall') {
+          await uninstallSkill();
+          send(res, 200, { ok: true, installed: false });
+          return true;
+        }
+        send(res, 200, { ok: false, reason: 'bad-request' });
+        return true;
+      }
+    } catch {
+      send(res, 200, { ok: false, reason: 'server-error' });
+      return true;
+    }
+  }
+
+  // --- /api/config: watched repos ---
   if (url.pathname !== '/api/config') return false;
 
   const method = (req.method || 'GET').toUpperCase();

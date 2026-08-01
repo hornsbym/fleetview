@@ -36,7 +36,9 @@ export interface Teammate {
   isLead: boolean;
   cwd: string | null;
   worktree: string | null;
+  branch: string | null;
   desc?: string;
+  model?: string | null;
   /** Self-reported lifecycle phase (M6); present only for plan-gated agents. */
   phase?: TeammatePhase | (string & {});
   /** The in-progress task this agent owns, if any. */
@@ -101,6 +103,8 @@ export interface Session {
   needsApproval: boolean;
   /** How many are parked (not just whether any are). */
   pendingApprovals: number;
+  /** True when at least one parked request is an AskUserQuestion. */
+  hasQuestion: boolean;
   cwd: string | null;
   leadSessionId: string | null;
   /** Human-readable session name, when known. */
@@ -152,6 +156,8 @@ export interface PendingSnapshot {
    * when it matters most.
    */
   cwdBySession?: Record<string, string>;
+  /** Sessions that have at least one parked AskUserQuestion. */
+  hasQuestionBySession?: Record<string, boolean>;
 }
 
 // --- Permissions: answering a question the session asked (hook bridge) ---
@@ -219,6 +225,15 @@ export interface Milestone {
   at: string | null;
 }
 
+/** One accomplishment in a session summary: a scannable title, optionally
+ *  expanded by a sentence or two. Legacy reports carry only a title. */
+export interface SummaryBullet {
+  /** Short noun phrase — what was accomplished. */
+  title: string;
+  /** 1-2 short sentences of detail, or '' when the agent gave none. */
+  description: string;
+}
+
 /**
  * What an agent writes about itself to
  * `<cwd>/.fleetview/sessions/<CLAUDE_CODE_SESSION_ID>.json`.
@@ -227,6 +242,11 @@ export interface Milestone {
 export interface AgentReport {
   /** 1-3 sentences on the conceptual work in flight. */
   now: string | null;
+  /** One-liner: the high-level objective this work is serving. */
+  goal: string | null;
+  /** 1-5 accomplishments, oldest first. Agents may write bare strings or one
+   *  prose blob instead; readReport coerces both into bullets. */
+  summary: SummaryBullet[] | null;
   /** High-level things finished this session, oldest first. */
   done: string[];
   updatedAt: string | null;
@@ -240,6 +260,8 @@ export interface SessionDigest {
   /** 1-3 sentences on what's happening — the agent's own words when it reports
    *  them, else a conceptual description of recent activity. Never a command. */
   now: string | null;
+  /** What this session has accomplished overall, oldest first. */
+  summary: SummaryBullet[] | null;
   /** True when the agent maintains its own report (see AgentReport). */
   reported: boolean;
   reportedAt: string | null;
@@ -253,8 +275,12 @@ export interface SessionDigest {
   compactions: number;
   edits: number;
   tools: number;
-  /** The last real user prompt — what it's currently working toward. */
+  /** Agent-authored goal or the last real user prompt — what it's working toward. */
+  goal: string | null;
+  /** The last real user prompt (fallback when no agent-authored goal exists). */
   lastRequest: string | null;
+  /** Task plan derived from TaskCreate/TaskUpdate or TodoWrite in the transcript. */
+  tasks: Task[];
 }
 
 // --- Session environment: metadata from the init system message ---
@@ -275,4 +301,6 @@ export type ChatItem =
   | { kind: 'user'; text: string; at?: string }
   | { kind: 'assistant'; text: string; at?: string }
   | { kind: 'tool'; name: string; summary: string; at?: string }
-  | { kind: 'result'; tokens?: number; at?: string };
+  | { kind: 'result'; tokens?: number; at?: string }
+  | { kind: 'notification'; text: string; at?: string }
+  | { kind: 'plan'; text: string; path: string; at?: string };

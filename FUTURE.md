@@ -122,6 +122,34 @@ tests over `claude agents --json` output and the hook payload would catch a Clau
 Code format change, which is the failure mode `PLAN.md` §3 claims to defend
 against. `capabilities()` is likewise still unbuilt.
 
+## Surface in-flight background Bash commands (Session view)
+
+Show a panel of currently-running background commands (`run_in_background: true`)
+on the session page — command, duration, and a "still running" indicator.
+
+**Constraint:** Claude Code tracks background processes entirely in-memory within
+its own process. There is no hook event, CLI flag, on-disk state, or API that
+exposes in-flight commands externally. The only observable signal is the session
+transcript JSONL: a `tool_use` with `run_in_background: true` that has no
+corresponding `tool_result` is presumed still running.
+
+**Implementation path:** extend the digest scanner to detect unmatched background
+Bash `tool_use` entries (match on `tool_use_id`), surface them as a
+`backgroundCommands: { command, startedAt, toolUseId }[]` field on the digest,
+and render a small collapsible panel on the session page.
+
+**Caveats:**
+- Freshness is bounded by the transcript tail poll (currently 2.5s). A command
+  that starts and finishes between two polls will never appear.
+- If Claude Code changes its transcript format for background commands, this
+  breaks silently.
+- No way to distinguish "still running" from "process died but CC hasn't written
+  the tool_result yet" — both look the same in the JSONL.
+
+**Unblocked by:** a future Claude Code hook like `BackgroundCommandStarted` /
+`BackgroundCommandCompleted` would make this real-time and robust. Worth a
+feature request at https://github.com/anthropics/claude-code/issues.
+
 ## Multi-machine / remote (speculative)
 
 Everything is `127.0.0.1`. Watching sessions on another machine would need an

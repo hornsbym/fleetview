@@ -77,6 +77,8 @@ export async function readActivity(tp: string | null): Promise<Activity> {
   let action: string | null = null;
   let at: string | null = null;
   let plan: PlanItem[] | null = null;
+
+  // Backward scan: find the most recent action and TodoWrite plan.
   for (let i = lines.length - 1; i >= 0 && !(action && plan); i--) {
     let o: any;
     try { o = JSON.parse(lines[i]); } catch { continue; }
@@ -90,6 +92,30 @@ export async function readActivity(tp: string | null): Promise<Activity> {
       }
     }
   }
+
+  // Fallback: derive plan from TaskCreate/TaskUpdate if no TodoWrite found.
+  if (!plan) {
+    const tasks = new Map<string, PlanItem>();
+    let nextId = 1;
+    for (let i = 0; i < lines.length; i++) {
+      let o: any;
+      try { o = JSON.parse(lines[i]); } catch { continue; }
+      if (o?.type !== 'assistant' || !Array.isArray(o?.message?.content)) continue;
+      for (const b of o.message.content) {
+        if (!b || b.type !== 'tool_use') continue;
+        if (b.name === 'TaskCreate' && b.input?.subject) {
+          const id = String(nextId++);
+          tasks.set(id, { content: b.input.subject, status: 'pending' });
+        }
+        if (b.name === 'TaskUpdate' && b.input?.taskId && b.input?.status) {
+          const t = tasks.get(b.input.taskId);
+          if (t) t.status = b.input.status;
+        }
+      }
+    }
+    if (tasks.size > 0) plan = [...tasks.values()];
+  }
+
   const value: Activity = { action, at, plan };
   activityCache.set(tp, { mtimeMs, size, value });
   return value;
@@ -104,4 +130,26 @@ export async function transcriptCwd(tp: string | null): Promise<string | null> {
     }
   } catch { /* ignore */ }
   return null;
+}
+
+/** Extract the model from a transcript. Cached once found — it never changes. */
+const modelCache = new Map<string, string>();
+export async function readModel(tp: string | null): Promise<string | null> {
+  if (!tp) return null;
+  const hit = modelCache.get(tp);
+  if (hit) return hit;
+
+  let model: string | null = null;
+  try {
+    for (const line of (await readHead(tp, 32768)).split('\n')) {
+      if (!line) continue;
+      try {
+        const o = JSON.parse(line);
+        if (o?.model && typeof o.model === 'string') { model = o.model; break; }
+        if (o?.type === 'assistant' && o?.message?.model) { model = o.message.model; break; }
+      } catch { /* skip */ }
+    }
+  } catch { /* ignore */ }
+  if (model) modelCache.set(tp, model);
+  return model;
 }

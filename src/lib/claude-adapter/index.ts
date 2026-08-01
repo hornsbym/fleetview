@@ -52,13 +52,16 @@ function withPending(fleet: Fleet, pending?: PendingSnapshot): Fleet {
   const counts = pending?.pendingBySession;
   if (!counts || Object.keys(counts).length === 0) return fleet;
 
+  const questions = pending?.hasQuestionBySession ?? {};
   const seen = new Set<string>();
   const projects = fleet.projects.map(p => ({
     ...p,
     sessions: p.sessions.map(s => {
       const n = counts[s.id] ?? 0;
+      const hq = !!questions[s.id];
       if (n > 0) seen.add(s.id);
-      return n === s.pendingApprovals ? s : { ...s, pendingApprovals: n, needsApproval: n > 0 };
+      if (n === s.pendingApprovals && hq === s.hasQuestion) return s;
+      return { ...s, pendingApprovals: n, needsApproval: n > 0, hasQuestion: hq };
     }),
   }));
 
@@ -79,8 +82,8 @@ function withPending(fleet: Fleet, pending?: PendingSnapshot): Fleet {
       byPath.set(key, project);
       projects.push(project);
     }
-    project.live = true;
-    project.sessions = [pendingOnlySession(sessionId, cwd, n), ...project.sessions];
+    project!.live = true;
+    project!.sessions = [pendingOnlySession(sessionId, cwd, n, !!questions[sessionId]), ...project!.sessions];
   }
 
   return { ...fleet, projects };
@@ -88,10 +91,10 @@ function withPending(fleet: Fleet, pending?: PendingSnapshot): Fleet {
 
 /** The minimum a session page needs to render an approval card for a session we
  *  know nothing else about yet. Everything unknown stays null rather than guessed. */
-function pendingOnlySession(id: string, cwd: string | null, pendingApprovals: number): Session {
+function pendingOnlySession(id: string, cwd: string | null, pendingApprovals: number, hasQuestion = false): Session {
   return {
     id, live: true, attached: true,
-    needsApproval: true, pendingApprovals,
+    needsApproval: true, pendingApprovals, hasQuestion,
     cwd, leadSessionId: id,
     name: null, kind: null, status: 'waiting', waitingFor: 'permission request',
     pid: null, gitBranch: null, lastActiveAt: Date.now(),

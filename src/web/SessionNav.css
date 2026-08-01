@@ -1,0 +1,151 @@
+.snav {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.snav-group {
+  margin-top: 8px;
+}
+.snav-project-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.snav-project-btn:hover {
+  color: var(--lead);
+}
+.snav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 8px;
+}
+.snav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.snav-item:hover {
+  background: var(--panel2);
+}
+.snav-item.sel {
+  background: var(--panel2);
+  border: 1px solid var(--lead);
+}
+.snav-item.done {
+  border: 1px solid var(--done);
+}
+.snav-item.flagged {
+  border: 1px solid var(--attention);
+}
+.snav-item.has-question {
+  border: 1px solid var(--lead);
+}
+.snav-item.unread {
+  border-left: 2px solid var(--done);
+}
+.snav-item.flagged.unread {
+  border-left: 2px solid var(--attention);
+}
+.snav-item.has-question.unread {
+  border-left: 2px solid var(--lead);
+}
+
+/* Session indicators */
+.snav-ind {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.snav-ind-idle {
+  width: 7px;
+  height: 7px;
+  background: var(--done);
+  animation: pulse-slow 3s infinite;
+}
+
+.snav-ind-working {
+  width: 12px;
+  height: 12px;
+  border: 2px solid transparent;
+  border-top-color: var(--done);
+  border-radius: 50%;
+  animation: spin 1.2s linear infinite;
+}
+
+.snav-ind-permission {
+  color: var(--attention);
+  background: none;
+}
+
+.snav-ind-question {
+  color: var(--lead);
+  background: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.snav-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snav-badge {
+  flex: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--attention);
+}
+
+.snav-focus {
+  flex: none;
+  opacity: 0;
+  font-size: 11px;
+  color: var(--dim);
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.snav-item:hover .snav-focus {
+  opacity: 1;
+}
+.snav-focus:hover {
+  color: var(--lead);
+  background: var(--panel);
+}

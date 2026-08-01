@@ -16,7 +16,7 @@
 import { open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { summarizeTool } from './transcripts';
-import type { AgentReport, Milestone, SessionDigest, TrailItem } from '../types';
+import type { AgentReport, Milestone, PlanItem, SessionDigest, SummaryBullet, TrailItem } from '../types';
 
 /** How many recent tool calls to keep for the activity trail. */
 const TRAIL_MAX = 8;
@@ -35,12 +35,18 @@ interface Cursor {
   edits: number;
   tools: number;
   lastUser: string | null;
+  /** Tasks created via TaskCreate, keyed by id. */
+  tasks: Map<string, { subject: string; status: string }>;
+  taskNextId: number;
+  /** Latest TodoWrite snapshot (overrides tasks if present). */
+  todoWrite: PlanItem[] | null;
 }
 
 const cursors = new Map<string, Cursor>();
 
 const fresh = (): Cursor => ({
   offset: 0, toolResults: new Set(), pendingAgents: new Map(), trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastUser: null,
+  tasks: new Map(), taskNextId: 1, todoWrite: null,
 });
 
 /**
@@ -145,10 +151,19 @@ function ingest(c: Cursor, line: string) {
     }
 
     // The harness task tools are the model's own statement of completion.
-    if (b.name === 'TaskUpdate' && b.input?.status === 'completed') {
-      pushDone(c, { kind: 'task', text: `Task #${b.input.taskId} completed`, at: o.timestamp ?? null });
+    if (b.name === 'TaskCreate' && b.input?.subject) {
+      const id = String(c.taskNextId++);
+      c.tasks.set(id, { subject: b.input.subject, status: 'pending' });
+    }
+    if (b.name === 'TaskUpdate' && b.input?.taskId) {
+      const t = c.tasks.get(b.input.taskId);
+      if (t && b.input.status) t.status = b.input.status;
+      if (b.input.status === 'completed') {
+        pushDone(c, { kind: 'task', text: t?.subject || `Task #${b.input.taskId} completed`, at: o.timestamp ?? null });
+      }
     }
     if (b.name === 'TodoWrite' && Array.isArray(b.input?.todos)) {
+      c.todoWrite = b.input.todos.map((t: any) => ({ content: t.content || t.activeForm || '', status: t.status || 'pending' }));
       for (const t of b.input.todos) {
         if (t?.status === 'completed' && t?.content) {
           pushDone(c, { kind: 'task', text: String(t.content), at: o.timestamp ?? null });
@@ -179,28 +194,148 @@ async function readReport(cwd: string | null, sessionId: string): Promise<AgentR
       ? raw.done.filter((d: unknown) => typeof d === 'string' && d.trim()).map((d: string) => d.trim())
       : [];
     const now = typeof raw?.now === 'string' ? raw.now.trim() : '';
-    if (!now && !done.length) return null;
-    return { now: now || null, done, updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null };
+    const goal = typeof raw?.goal === 'string' ? raw.goal.trim() : '';
+    const summary = summaryBullets(raw?.summary);
+    if (!now && !done.length && !summary.length && !goal) return null;
+    return { now: now || null, goal: goal || null, summary: summary.length ? summary : null, done, updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null };
   } catch {
     return null;
   }
 }
 
-/** Conceptual description of recent activity — no tool names, no commands. */
+const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+
+/** Split prose on sentence boundaries. The lookbehind requires a lowercase
+ *  letter or digit before the stop, which keeps "e.g." and "v1.2" intact; the
+ *  lookahead requires a capital, so a split only happens where a new sentence
+ *  plausibly starts. */
+const sentences = (text: string) =>
+  text.split(/(?<=[a-z0-9][.!?])\s+(?=[A-Z])/).map(s => s.trim()).filter(Boolean);
+
+/**
+ * Normalize `summary` into {title, description} bullets.
+ *
+ * Three shapes reach this, and all three have to render: the objects the skill
+ * asks for, bare strings (the shape the skill asked for previously), and one
+ * prose blob (the shape before that, and what an agent still produces when it
+ * paraphrases the instruction). Strings become title-only bullets — a sentence
+ * promoted to a title is honest, whereas inventing a title from its first few
+ * words is not. Prose is split so a paragraph isn't one dense bullet.
+ */
+function summaryBullets(raw: unknown): SummaryBullet[] {
+  const bullet = (v: unknown): SummaryBullet | null => {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const o = v as Record<string, unknown>;
+      const description = clean(o.description);
+      // Description-only is malformed but recoverable: it's still the one piece
+      // of text the agent wrote, so show it rather than dropping the bullet.
+      const title = clean(o.title) || description;
+      if (!title) return null;
+      return { title, description: title === description ? '' : description };
+    }
+    const text = clean(v);
+    return text ? { title: text, description: '' } : null;
+  };
+
+  if (Array.isArray(raw)) return raw.map(bullet).filter((b): b is SummaryBullet => b !== null);
+  const text = clean(raw);
+  if (!text) return [];
+  return sentences(text).map(s => ({ title: s, description: '' }));
+}
+
+/** Conceptual description of recent activity derived from the tool trail.
+ *  Aims for sentences like "Investigating route handler in main.ts" or
+ *  "Waiting for report back from code-reviewer agent" rather than generic
+ *  "editing files" or tool names. */
 function describeActivity(trail: TrailItem[]): string | null {
   if (!trail.length) return null;
-  const kind = (name: string): string => {
-    if (name === 'Edit' || name === 'Write' || name === 'NotebookEdit') return 'editing files';
-    if (name === 'Read' || name === 'Grep' || name === 'Glob') return 'reading through the codebase';
-    if (name === 'Agent' || name === 'Task') return 'coordinating subagents';
-    if (name.startsWith('mcp__')) return 'working with an external tool';
-    if (name === 'Bash') return 'running commands';
-    return 'working';
-  };
-  const counts = new Map<string, number>();
-  for (const t of trail) counts.set(kind(t.name), (counts.get(kind(t.name)) ?? 0) + 1);
-  const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  return top ? `Recently ${top}.` : null;
+
+  // Most recent tool call is the best signal for "what it's doing right now".
+  const latest = trail[trail.length - 1];
+  const desc = describeOne(latest);
+  if (desc) return desc;
+
+  // If the latest didn't produce a good sentence, try the second-most-recent.
+  if (trail.length > 1) {
+    const prev = describeOne(trail[trail.length - 2]);
+    if (prev) return prev;
+  }
+
+  return null;
+}
+
+function describeOne(item: TrailItem): string | null {
+  const name = item.name;
+  const summary = item.summary;
+
+  if (name === 'Agent' || name === 'Task') {
+    // summary looks like "Spawn code-reviewer: Review the auth middleware"
+    const m = summary.match(/^Spawn\s+(\S+?)(?::\s*(.+))?$/);
+    if (m) {
+      const agentType = m[1];
+      const task = m[2];
+      if (task) return `Delegating to ${agentType} agent — ${task}`;
+      return `Waiting for report back from ${agentType} agent`;
+    }
+    return 'Coordinating subagents';
+  }
+
+  if (name === 'Edit' || name === 'Write' || name === 'NotebookEdit') {
+    // summary looks like "Edit App.tsx" or "Write store.ts"
+    const file = summary.replace(/^(Edit|Write|NotebookEdit)\s*/, '');
+    if (file) return `Writing code in ${file}`;
+    return 'Writing code';
+  }
+
+  if (name === 'Read') {
+    const file = summary.replace(/^Read\s*/, '');
+    if (file) return `Investigating ${file}`;
+    return 'Reading through the codebase';
+  }
+
+  if (name === 'Grep') {
+    const pattern = summary.replace(/^Grep\s*/, '');
+    if (pattern) return `Searching for "${pattern}"`;
+    return 'Searching the codebase';
+  }
+
+  if (name === 'Glob') {
+    const pattern = summary.replace(/^Glob\s*/, '');
+    if (pattern) return `Looking for files matching ${pattern}`;
+    return 'Scanning file structure';
+  }
+
+  if (name === 'Bash') {
+    // summary looks like "Bash: description" or "Bash: raw command"
+    const cmd = summary.replace(/^Bash:\s*/, '');
+    if (!cmd) return 'Executing a command';
+    // If the tool had a human-written description, use it directly.
+    // Heuristic: descriptions are sentence-like (start with uppercase or a verb),
+    // while raw commands start with lowercase or special chars.
+    if (/^[A-Z]/.test(cmd) && !cmd.startsWith('/')) return cmd;
+    // Try to extract intent from common command patterns
+    if (/\b(test|jest|vitest|mocha|pytest)\b/i.test(cmd)) return 'Running tests';
+    if (/\btsc\b|type.?check/i.test(cmd)) return 'Type-checking the project';
+    if (/\b(build|compile|vite build|webpack)\b/i.test(cmd)) return 'Building the project';
+    if (/\bgit\s+(status|diff|log)\b/.test(cmd)) return 'Checking git state';
+    if (/\bgit\s+commit\b/.test(cmd)) return 'Committing changes';
+    if (/\b(curl|fetch|wget)\b/.test(cmd)) return 'Making an HTTP request';
+    if (/\b(npm|pnpm|yarn)\s+(install|add)\b/.test(cmd)) return 'Installing dependencies';
+    if (/\bdev\b|server/i.test(cmd)) return 'Starting a dev server';
+    return `Executing: ${cmd.slice(0, 60)}`;
+  }
+
+  if (name === 'AskUserQuestion') {
+    return 'Waiting for your answer';
+  }
+
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__');
+    const server = parts[1] || 'external';
+    return `Working with ${server}`;
+  }
+
+  return null;
 }
 
 /**
@@ -266,11 +401,12 @@ export async function readDigest(
   const report = await readReport(opts.cwd ?? null, opts.sessionId ?? '');
   const empty: SessionDigest = {
     now: report?.now ?? null,
+    summary: report?.summary ?? null,
     reported: !!report,
     reportedAt: report?.updatedAt ?? null,
     doing: null, trail: [],
     done: (report?.done ?? []).map(text => ({ kind: 'reported' as const, text, at: null })),
-    compactions: 0, edits: 0, tools: 0, lastRequest: null,
+    compactions: 0, edits: 0, tools: 0, goal: report?.goal ?? null, lastRequest: null, tasks: [],
   };
   if (!transcriptPath) return empty;
   const c = await scan(transcriptPath);
@@ -283,6 +419,7 @@ export async function readDigest(
     // The agent's own sentence wins; otherwise say what it's conceptually doing
     // rather than naming the tool — a command string is not an explanation.
     now: report?.now ?? describeActivity(trail),
+    summary: report?.summary ?? null,
     reported: !!report,
     reportedAt: report?.updatedAt ?? null,
     doing: trail[0] ?? null,
@@ -295,6 +432,26 @@ export async function readDigest(
     compactions: c.compactions,
     edits: c.edits,
     tools: c.tools,
+    goal: report?.goal ?? null,
     lastRequest: c.lastUser,
+    tasks: buildTasks(c),
   };
+}
+
+function buildTasks(c: Cursor): import('../types').Task[] {
+  if (c.todoWrite) {
+    return c.todoWrite.map((t, i) => ({
+      id: String(i + 1),
+      subject: t.content,
+      status: t.status === 'completed' ? 'completed' as const : t.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+    }));
+  }
+  if (c.tasks.size > 0) {
+    return [...c.tasks.entries()].map(([id, t]) => ({
+      id,
+      subject: t.subject,
+      status: t.status === 'completed' ? 'completed' as const : t.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+    }));
+  }
+  return [];
 }

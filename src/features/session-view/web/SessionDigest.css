@@ -38,6 +38,16 @@
 
 .dg-when { margin-left: auto; color: var(--faint); font-size: 10px; flex-shrink: 0; }
 
+/* Summary bullets. Discs rather than the numbers Milestones uses: these are an
+   unordered set of accomplishments, not a sequence to count through. Title and
+   description are separate rows so the titles alone read as a scannable list. */
+.dg-bullets { margin: 0; padding: 0 0 0 18px; list-style: disc; }
+.dg-bullets li::marker { color: var(--faint); }
+.dg-bullet { font-size: 13px; line-height: 1.45; }
+.dg-bullet + .dg-bullet { margin-top: 8px; }
+.dg-bullet-title { display: block; color: var(--ink); font-weight: 600; }
+.dg-bullet-desc { display: block; margin-top: 2px; font-size: 12px; color: var(--dim); }
+
 
 .dg-counts {
   display: flex; gap: 12px; margin-top: 10px; padding-top: 8px;
