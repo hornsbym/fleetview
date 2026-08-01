@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Type-only import: erased at build, so no Node code leaks into the browser bundle.
 import type { Fleet, Project, Session, SessionDigest } from '../lib/claude-adapter/types';
-import { ProjectSwitcher } from '../features/projects/web';
+import { ProjectSwitcher, ReportingSetup } from '../features/projects/web';
 import { projectSlugs } from '../features/projects/shared/slug';
 import { Teammates } from '../features/teammates/web';
 import { TaskBoard } from '../features/task-board/web';
@@ -123,6 +123,7 @@ function ProjectView({ project, slug, completed, clearCompleted }: { project: Pr
   return (
     <>
       <HookSetup />
+      <ReportingSetup />
       <div className="pv-head">
         <div>
           <h2 className="pv-title">{project.name}</h2>

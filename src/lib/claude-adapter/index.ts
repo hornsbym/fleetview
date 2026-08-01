@@ -78,7 +78,7 @@ function withPending(fleet: Fleet, pending?: PendingSnapshot): Fleet {
     const key = cwd ?? '(unknown project)';
     let project = byPath.get(key);
     if (!project) {
-      project = { path: key, name: key.split('/').pop() || key, sessions: [], live: true, reportingEnabled: false, activeTeammates: 0 };
+      project = { path: key, name: key.split('/').pop() || key, sessions: [], live: true, activeTeammates: 0 };
       byPath.set(key, project);
       projects.push(project);
     }

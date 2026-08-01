@@ -125,8 +125,6 @@ export interface Project {
   path: string;
   name: string;
   live: boolean;
-  /** Whether FleetView session reporting is enabled for this repo. */
-  reportingEnabled: boolean;
   activeTeammates: number;
   sessions: Session[];
 }
@@ -140,8 +138,6 @@ export interface Fleet {
 export interface FleetConfig {
   /** Additional watched repo paths — always shown as projects (additive, not a filter). */
   repos?: string[];
-  /** Repos where session reporting is enabled. */
-  enabledRepos?: string[];
 }
 
 /**
