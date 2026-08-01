@@ -16,7 +16,7 @@
 import { open, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { summarizeTool } from './transcripts';
-import type { AgentReport, Milestone, SessionDigest, TrailItem } from '../types';
+import type { AgentReport, Milestone, PlanItem, SessionDigest, TrailItem } from '../types';
 
 /** How many recent tool calls to keep for the activity trail. */
 const TRAIL_MAX = 8;
@@ -35,12 +35,18 @@ interface Cursor {
   edits: number;
   tools: number;
   lastUser: string | null;
+  /** Tasks created via TaskCreate, keyed by id. */
+  tasks: Map<string, { subject: string; status: string }>;
+  taskNextId: number;
+  /** Latest TodoWrite snapshot (overrides tasks if present). */
+  todoWrite: PlanItem[] | null;
 }
 
 const cursors = new Map<string, Cursor>();
 
 const fresh = (): Cursor => ({
   offset: 0, toolResults: new Set(), pendingAgents: new Map(), trail: [], done: [], compactions: 0, edits: 0, tools: 0, lastUser: null,
+  tasks: new Map(), taskNextId: 1, todoWrite: null,
 });
 
 /**
@@ -145,10 +151,19 @@ function ingest(c: Cursor, line: string) {
     }
 
     // The harness task tools are the model's own statement of completion.
-    if (b.name === 'TaskUpdate' && b.input?.status === 'completed') {
-      pushDone(c, { kind: 'task', text: `Task #${b.input.taskId} completed`, at: o.timestamp ?? null });
+    if (b.name === 'TaskCreate' && b.input?.subject) {
+      const id = String(c.taskNextId++);
+      c.tasks.set(id, { subject: b.input.subject, status: 'pending' });
+    }
+    if (b.name === 'TaskUpdate' && b.input?.taskId) {
+      const t = c.tasks.get(b.input.taskId);
+      if (t && b.input.status) t.status = b.input.status;
+      if (b.input.status === 'completed') {
+        pushDone(c, { kind: 'task', text: t?.subject || `Task #${b.input.taskId} completed`, at: o.timestamp ?? null });
+      }
     }
     if (b.name === 'TodoWrite' && Array.isArray(b.input?.todos)) {
+      c.todoWrite = b.input.todos.map((t: any) => ({ content: t.content || t.activeForm || '', status: t.status || 'pending' }));
       for (const t of b.input.todos) {
         if (t?.status === 'completed' && t?.content) {
           pushDone(c, { kind: 'task', text: String(t.content), at: o.timestamp ?? null });
@@ -351,7 +366,7 @@ export async function readDigest(
     reportedAt: report?.updatedAt ?? null,
     doing: null, trail: [],
     done: (report?.done ?? []).map(text => ({ kind: 'reported' as const, text, at: null })),
-    compactions: 0, edits: 0, tools: 0, goal: report?.goal ?? null, lastRequest: null,
+    compactions: 0, edits: 0, tools: 0, goal: report?.goal ?? null, lastRequest: null, tasks: [],
   };
   if (!transcriptPath) return empty;
   const c = await scan(transcriptPath);
@@ -379,5 +394,24 @@ export async function readDigest(
     tools: c.tools,
     goal: report?.goal ?? null,
     lastRequest: c.lastUser,
+    tasks: buildTasks(c),
   };
+}
+
+function buildTasks(c: Cursor): import('../types').Task[] {
+  if (c.todoWrite) {
+    return c.todoWrite.map((t, i) => ({
+      id: String(i + 1),
+      subject: t.content,
+      status: t.status === 'completed' ? 'completed' as const : t.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+    }));
+  }
+  if (c.tasks.size > 0) {
+    return [...c.tasks.entries()].map(([id, t]) => ({
+      id,
+      subject: t.subject,
+      status: t.status === 'completed' ? 'completed' as const : t.status === 'in_progress' ? 'in_progress' as const : 'pending' as const,
+    }));
+  }
+  return [];
 }

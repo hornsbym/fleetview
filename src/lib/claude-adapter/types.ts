@@ -269,6 +269,8 @@ export interface SessionDigest {
   goal: string | null;
   /** The last real user prompt (fallback when no agent-authored goal exists). */
   lastRequest: string | null;
+  /** Task plan derived from TaskCreate/TaskUpdate or TodoWrite in the transcript. */
+  tasks: Task[];
 }
 
 // --- Session environment: metadata from the init system message ---

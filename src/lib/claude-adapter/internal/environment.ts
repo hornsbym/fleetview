@@ -74,8 +74,17 @@ async function parseTranscript(tp: string): Promise<SessionEnvironment | null> {
     }
     if (o?.type === 'attachment') {
       const a = o.attachment;
-      if (a?.type === 'skill_listing' && Array.isArray(a.names) && env.skills.length === 0) {
-        env.skills = a.names.filter((s: unknown) => typeof s === 'string');
+      if (a?.type === 'skill_listing' && Array.isArray(a.names)) {
+        for (const s of a.names) {
+          if (typeof s === 'string' && !env.skills.includes(s)) env.skills.push(s);
+        }
+        found = true;
+      }
+      if (a?.type === 'invoked_skills' && Array.isArray(a.skills)) {
+        for (const s of a.skills) {
+          const name = typeof s === 'string' ? s : s?.name;
+          if (typeof name === 'string' && !env.skills.includes(name)) env.skills.push(name);
+        }
         found = true;
       }
     }
@@ -85,26 +94,44 @@ async function parseTranscript(tp: string): Promise<SessionEnvironment | null> {
     }
   }
 
-  // Second pass: stream the full file but only parse lines containing
-  // "deferred_tools_delta" to find all MCP servers (they can connect late).
+  // Second pass: stream the full file for late-arriving metadata.
+  // MCP servers can connect at any point; skills can be invoked mid-session.
   const knownServers = new Set<string>();
   const rl = createInterface({ input: createReadStream(tp, 'utf8'), crlfDelay: Infinity });
   for await (const line of rl) {
-    if (!line.includes('deferred_tools_delta')) continue;
+    if (!line.includes('deferred_tools_delta') && !line.includes('invoked_skills') && !line.includes('skill_listing')) continue;
     let o: any;
     try { o = JSON.parse(line); } catch { continue; }
     const a = o?.attachment;
-    if (a?.type !== 'deferred_tools_delta' || !Array.isArray(a.addedNames)) continue;
-    for (const n of a.addedNames) {
-      if (typeof n === 'string' && n.startsWith('mcp__')) {
-        const name = n.split('__')[1];
-        if (!knownServers.has(name)) {
-          knownServers.add(name);
-          env.mcpServers.push({ name, status: 'connected' });
+    if (!a) continue;
+
+    if (a.type === 'deferred_tools_delta' && Array.isArray(a.addedNames)) {
+      for (const n of a.addedNames) {
+        if (typeof n === 'string' && n.startsWith('mcp__')) {
+          const name = n.split('__')[1];
+          if (!knownServers.has(name)) {
+            knownServers.add(name);
+            env.mcpServers.push({ name, status: 'connected' });
+          }
         }
       }
+      found = true;
     }
-    found = true;
+
+    if (a.type === 'skill_listing' && Array.isArray(a.names)) {
+      for (const s of a.names) {
+        if (typeof s === 'string' && !env.skills.includes(s)) env.skills.push(s);
+      }
+      found = true;
+    }
+
+    if (a.type === 'invoked_skills' && Array.isArray(a.skills)) {
+      for (const s of a.skills) {
+        const name = typeof s === 'string' ? s : s?.name;
+        if (typeof name === 'string' && !env.skills.includes(name)) env.skills.push(name);
+      }
+      found = true;
+    }
   }
 
   return found ? env : null;

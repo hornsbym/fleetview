@@ -1,0 +1,22 @@
+.sk-prompt {
+  background: var(--panel); border: 1px dashed var(--border);
+  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px;
+}
+.sk-text {
+  margin: 0; font-size: 12px; line-height: 1.5; color: var(--dim);
+}
+.sk-text strong {
+  display: block; margin-bottom: 4px; color: var(--ink); font-size: 13px;
+}
+.sk-text code {
+  font-family: var(--mono); font-size: 11px; color: var(--ink);
+  background: var(--border); border-radius: 3px; padding: 1px 5px;
+}
+.sk-btn {
+  margin-top: 10px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  color: var(--ink); cursor: pointer; font: inherit; font-size: 12px; padding: 6px 12px;
+}
+.sk-btn:hover:not(:disabled) { background: var(--panel2); border-color: var(--lead); }
+.sk-btn:disabled { opacity: .5; cursor: default; }
+.sk-primary { border-color: var(--lead); color: var(--lead); }

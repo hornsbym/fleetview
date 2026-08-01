@@ -50,15 +50,6 @@ export function SessionEnvironmentPanel({ session, sessionId }: {
           <EnvRow label="Permission mode" value={env.permissionMode} />
           <EnvRow label="Version" value={env.version} mono />
 
-          {env.skills.length > 0 && (
-            <div className="dg-env-row">
-              <span className="dg-env-label">Skills</span>
-              <div className="dg-env-tags">
-                {env.skills.map(s => <span key={s} className="dg-env-tag mono">{s}</span>)}
-              </div>
-            </div>
-          )}
-
           {env.tools.length > 0 && (
             <div className="dg-env-row">
               <span className="dg-env-label">Tools</span>
