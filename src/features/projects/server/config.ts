@@ -70,13 +70,19 @@ const SKILL_PATH = path.join(SKILL_DIR, 'fleetview.md');
 
 const FLEETVIEW_SKILL = `# /fleetview — Enable FleetView session reporting
 
-From now on in this session, whenever you complete something significant (a fix, a feature, a refactor — not every small step), update \`.fleetview/sessions/$CLAUDE_CODE_SESSION_ID.json\` in the project root with a brief summary of what this session has accomplished so far.
+From now on in this session, maintain \`.fleetview/sessions/$CLAUDE_CODE_SESSION_ID.json\` in the project root to keep FleetView informed of your progress.
+
+Update the file:
+- **\`now\`**: Every time you start a new piece of work (not every tool call — when you shift focus). One sentence describing what you're actively doing, written for a human scanning a dashboard.
+- **\`summary\`**: Whenever you complete something significant (a fix, a feature, a refactor). 1-5 sentences covering everything this session has accomplished so far.
+- **\`updatedAt\`**: ISO 8601 timestamp of this update.
 
 The file schema:
 
 \`\`\`json
 {
-  "summary": "1-5 sentences describing what this session has accomplished.",
+  "now": "Brief, human-readable description of current activity.",
+  "summary": "Cumulative summary of what this session has accomplished.",
   "updatedAt": "ISO 8601 timestamp"
 }
 \`\`\`
@@ -84,8 +90,8 @@ The file schema:
 Rules:
 - Create the \`.fleetview/sessions/\` directory if it doesn't exist.
 - Overwrite the file each time — it's the current state, not a log.
-- Keep the summary concise and focused on outcomes, not process.
-- The \`summary\` field is cumulative — it covers everything accomplished in this session, not just the latest change.
+- Write \`now\` in plain language a colleague would understand at a glance (e.g. "Refactoring the auth middleware to use the new token format" not "Edit auth.ts").
+- Keep \`summary\` concise and focused on outcomes, not process.
 - This is purely for visualization — it does not affect your work.
 
 Acknowledge with: "FleetView reporting enabled for this session."
