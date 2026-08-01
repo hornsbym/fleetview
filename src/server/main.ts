@@ -5,8 +5,8 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
-import { readFleet, claudeVersion } from '../lib/claude-adapter/index';
-import { handleConfigRoute, readConfig } from '../features/projects/server';
+import { readFleet, claudeVersion, type Fleet } from '../lib/claude-adapter/index';
+import { handleConfigRoute, readConfig, ensureReportDirs } from '../features/projects/server';
 import { handleSessionRoute } from '../features/session-view/server';
 import { handleHooksRoute } from '../features/hooks/server';
 import { handleTerminalFocusRoute } from '../features/terminal-focus/server';
@@ -32,12 +32,39 @@ function contentType(f: string): string {
   }
 }
 
+/**
+ * Every directory a session might write a `.fleetview/` report into.
+ *
+ * Three sources, because watched repos alone are not enough: a live session can
+ * sit in a repo nobody added, and each worktree agent reports into its own
+ * `plan.json` beside its own checkout. Synthetic entries (the `(unknown project)`
+ * bucket withPending can invent) fall out harmlessly — ensureReportDir stats the
+ * path first and skips anything that is not already a directory.
+ */
+function reportingDirs(repos: string[], fleet: Fleet): (string | null)[] {
+  const dirs: (string | null)[] = [...repos];
+  for (const p of fleet.projects) {
+    dirs.push(p.path);
+    for (const s of p.sessions) {
+      dirs.push(s.cwd);
+      for (const m of s.members) dirs.push(m.worktree);
+    }
+  }
+  return dirs;
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', 'http://localhost');
     if (url.pathname === '/api/fleet') {
       const cfg = await readConfig();
-      return send(res, 200, JSON.stringify(await readFleet({ repos: cfg.repos }, pendingSnapshot())));
+      const fleet = await readFleet({ repos: cfg.repos }, pendingSnapshot());
+      // Create the report directories FleetView reads from, rather than asking the
+      // agent to. Done here and not in the adapter, which observes Claude Code's
+      // state and never writes into an observed repo. Fire-and-forget: nothing in
+      // this response depends on it, and no poll should wait on disk I/O.
+      void ensureReportDirs(reportingDirs(cfg.repos, fleet));
+      return send(res, 200, JSON.stringify(fleet));
     }
     if (url.pathname === '/api/health') return send(res, 200, JSON.stringify({ ok: true, claude: claudeVersion() }));
     if (await handleConfigRoute(req, res)) return;
@@ -85,6 +112,9 @@ function lanUrls(port: number): string[] {
 // (unauthenticated — trusted networks only).
 (async () => {
   const cfg = await readConfig().catch(() => null);
+  // Watched repos get their report directory at boot, so a session that starts
+  // before anyone opens the dashboard still has somewhere ignored to write.
+  void ensureReportDirs(cfg?.repos ?? []);
   const HOST = process.env.HOST || cfg?.host || '127.0.0.1';
   const exposed = HOST !== '127.0.0.1' && HOST !== 'localhost';
   server.listen(PORT, HOST, () => {

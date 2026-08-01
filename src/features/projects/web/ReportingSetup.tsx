@@ -52,8 +52,9 @@ export function ReportingSetup() {
         </p>
         <p className="rs-note">
           Sessions only report when you explicitly run <code>/fleetview</code> — no
-          session is affected without your say-so. Reports land in a self-ignored{' '}
-          <code>.fleetview/</code> directory, so nothing is ever committed.
+          session is affected without your say-so. Reports land in a{' '}
+          <code>.fleetview/</code> directory FleetView creates and git-ignores for you,
+          so nothing is ever committed.
         </p>
       </div>
       <div className="rs-actions">

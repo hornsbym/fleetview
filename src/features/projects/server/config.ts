@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { DEFAULT_CONFIG, type FleetViewConfig } from '../shared/config';
+import { ensureReportDir } from './scaffold';
 
 const CONFIG_PATH = path.join(homedir(), '.fleetview.json');
 
@@ -54,7 +55,11 @@ export async function writeConfig(config: FleetViewConfig): Promise<FleetViewCon
 
 export async function addRepo(repoPath: string): Promise<FleetViewConfig> {
   const config = await readConfig();
-  return writeConfig({ ...config, repos: [...config.repos, repoPath.trim()] });
+  const target = repoPath.trim();
+  // Scaffold now rather than waiting for the next /api/fleet poll, so a session
+  // started immediately after adding the repo never races the .gitignore.
+  await ensureReportDir(target);
+  return writeConfig({ ...config, repos: [...config.repos, target] });
 }
 
 export async function removeRepo(repoPath: string): Promise<FleetViewConfig> {
@@ -77,7 +82,7 @@ const SKILL_PATH = path.join(SKILL_DIR, 'fleetview.md');
  * The marker is written at the END of the file: Claude Code derives the command's
  * description from the leading heading, so nothing may precede it.
  */
-const SKILL_VERSION = 2;
+const SKILL_VERSION = 3;
 const SKILL_MARKER = /<!--\s*fleetview-skill:\s*v(\d+)/;
 
 const FLEETVIEW_SKILL = `# /fleetview — Enable FleetView session reporting
@@ -107,8 +112,7 @@ The file schema:
 \`\`\`
 
 Rules:
-- Create the \`.fleetview/sessions/\` directory if it doesn't exist.
-- The first time you create \`.fleetview/\`, also write \`.fleetview/.gitignore\` containing a single line \`*\`. This makes the whole directory invisible to git without touching the repo's own \`.gitignore\`. Skip if that file already exists.
+- Write only that one JSON file. FleetView creates and git-ignores \`.fleetview/\` itself — never add, move, or clean up anything else in that directory.
 - Overwrite the file each time — it's the current state, not a log.
 - Write \`now\` in plain language a colleague would understand at a glance (e.g. "Refactoring the auth middleware to use the new token format" not "Edit auth.ts").
 - Keep \`summary\` entries focused on outcomes, not process. Bias hard toward brevity: a scannable title with no description beats a padded one.
